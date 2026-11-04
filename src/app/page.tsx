@@ -1,10 +1,19 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
+import { connection } from "next/server";
 
 import { EmptyState } from "@/components/empty-state";
 import { NewsletterForm } from "@/components/newsletter-form";
+import { OpportunityCard } from "@/components/opportunity-card";
 import { SearchBar } from "@/components/search-bar";
 import { Section } from "@/components/section";
+import { isSupabaseConfigured } from "@/lib/env";
+import type { OpportunitySummary } from "@/lib/opportunities";
+import {
+  getLatestOpportunities,
+  getUpcomingDeadlines,
+} from "@/lib/opportunities.server";
 import { categories, qualifications, regions, site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -81,7 +90,7 @@ export default function Home() {
             {regions.map((r) => (
               <Link
                 key={r.slug}
-                href={`/opportunities?region=${r.slug}`}
+                href={`/opportunities?state=${r.slug}`}
                 className="rounded-lg border border-border bg-card px-5 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
               >
                 {r.label}
@@ -96,15 +105,19 @@ export default function Home() {
           description="Newly published, verified listings."
           moreHref="/opportunities"
         >
-          <EmptyState />
+          <Suspense fallback={<CardsSkeleton />}>
+            <LatestOpportunities />
+          </Suspense>
         </Section>
 
         {/* Deadlines approaching */}
         <Section
           title="Application deadlines approaching"
-          moreHref="/opportunities?sort=closing"
+          moreHref="/opportunities?sort=deadline"
         >
-          <EmptyState message="No approaching deadlines to show yet. Closing dates will appear here once opportunities are published." />
+          <Suspense fallback={<CardsSkeleton />}>
+            <UpcomingDeadlines />
+          </Suspense>
         </Section>
 
         {/* Recently published notifications */}
@@ -142,6 +155,52 @@ export default function Home() {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+async function LatestOpportunities() {
+  if (!isSupabaseConfigured) return <EmptyState />;
+  const rows = await getLatestOpportunities(4);
+  if (rows.length === 0) return <EmptyState />;
+  return <OpportunityGrid rows={rows} />;
+}
+
+async function UpcomingDeadlines() {
+  if (!isSupabaseConfigured) {
+    return (
+      <EmptyState message="No approaching deadlines to show yet. Closing dates will appear here once opportunities are published." />
+    );
+  }
+  // Read the clock at request time (deferred via connection) so "today" is
+  // resolved per request, not baked into the prerendered shell.
+  await connection();
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = await getUpcomingDeadlines(today, 4);
+  if (rows.length === 0) {
+    return (
+      <EmptyState message="No approaching deadlines right now. New closing dates will appear here as opportunities are published." />
+    );
+  }
+  return <OpportunityGrid rows={rows} />;
+}
+
+function OpportunityGrid({ rows }: { rows: OpportunitySummary[] }) {
+  return (
+    <ul className="grid gap-4 sm:grid-cols-2">
+      {rows.map((opp) => (
+        <OpportunityCard key={opp.id} opp={opp} />
+      ))}
+    </ul>
+  );
+}
+
+function CardsSkeleton() {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2" aria-hidden>
+      {Array.from({ length: 2 }).map((_, i) => (
+        <div key={i} className="h-44 rounded-xl border border-border bg-muted/30" />
+      ))}
     </div>
   );
 }

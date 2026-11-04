@@ -12,6 +12,8 @@ import {
   type OpportunityDetail,
 } from "@/lib/opportunities";
 import { getOpportunityBySlug } from "@/lib/opportunities.server";
+import { JsonLd } from "@/components/json-ld";
+import { env } from "@/lib/env";
 
 export async function generateMetadata({
   params,
@@ -66,6 +68,7 @@ async function OpportunityDetailView({
 
   return (
     <article className="mx-auto max-w-4xl px-4 py-8">
+      <JsonLd data={buildStructuredData(opp, env.siteUrl)} />
       <nav className="text-sm text-muted-foreground" aria-label="Breadcrumb">
         <Link href="/opportunities" className="hover:text-foreground">
           Opportunities
@@ -266,6 +269,57 @@ function usableUrl(url: string | null): string | null {
   if (!trimmed || trimmed === "#") return null;
   if (!/^https?:\/\//i.test(trimmed)) return null;
   return trimmed;
+}
+
+/**
+ * schema.org JSON-LD for the page: a BreadcrumbList always, plus a JobPosting
+ * only when the opportunity is a job and the fields Google requires are present.
+ * We deliberately do NOT mark exams, admissions or scholarships as JobPosting —
+ * that would misrepresent non-jobs and violates Google's structured-data rules.
+ */
+function buildStructuredData(opp: OpportunityDetail, siteUrl: string): object[] {
+  const base = siteUrl.replace(/\/$/, "");
+  const url = `${base}/opportunities/${opp.slug}`;
+
+  const data: object[] = [
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: `${base}/` },
+        { "@type": "ListItem", position: 2, name: "Opportunities", item: `${base}/opportunities` },
+        { "@type": "ListItem", position: 3, name: opp.title, item: url },
+      ],
+    },
+  ];
+
+  const datePosted = opp.publicationDate ?? opp.applicationStartDate;
+  if (opp.type === "job" && datePosted && opp.organisation) {
+    data.push({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: opp.title,
+      description: opp.description ?? opp.title,
+      datePosted,
+      ...(opp.applicationEndDate ? { validThrough: opp.applicationEndDate } : {}),
+      hiringOrganization: {
+        "@type": "Organization",
+        name: opp.organisation.name,
+        ...(opp.organisation.website ? { sameAs: opp.organisation.website } : {}),
+      },
+      jobLocation: {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressCountry: "IN",
+          ...(opp.state ? { addressRegion: opp.state.name } : {}),
+        },
+      },
+      url,
+    });
+  }
+
+  return data;
 }
 
 function eventDateLabel(event: ExamEvent): string {

@@ -23,6 +23,9 @@ export function OpportunityCard({ opp }: { opp: OpportunitySummary }) {
     <li>
       <Link
         href={`/opportunities/${opp.slug}`}
+        // The detail route is dynamic and its shell is mostly a skeleton, so
+        // prefetching it buys little and costs a server invocation per card.
+        prefetch={false}
         className="flex h-full flex-col rounded-xl border border-border bg-card p-5 shadow-sm transition-colors hover:border-primary/40"
       >
         <div className="flex flex-wrap items-center gap-2">

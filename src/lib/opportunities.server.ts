@@ -17,6 +17,19 @@ import {
   type StateOption,
 } from "@/lib/opportunities";
 
+/**
+ * Fail a query with context. When the framework aborts a render (e.g. while
+ * prefetching or prerendering a dynamic route), the in-flight request surfaces
+ * here as an abort; re-throw it as a real AbortError so Next treats it as its
+ * own control-flow signal rather than a page-level error. Everything else is a
+ * genuine failure, surfaced with context.
+ */
+function throwQueryError(context: string, error: { message?: string } | null): never {
+  const message = error?.message ?? "unknown error";
+  if (/abort/i.test(message)) throw new DOMException(message, "AbortError");
+  throw new Error(`${context}: ${message}`);
+}
+
 // Columns selected for a listing row. Each row is an opportunity with its
 // required English translation (inner join) plus the relations we display.
 // Visibility (published + verified) is enforced by RLS for the anon key, so we
@@ -222,12 +235,50 @@ export async function getOpportunities(
   query = query.range(from, from + PAGE_SIZE - 1);
 
   const { data, count, error } = await query;
-  if (error) {
-    throw new Error(`Failed to load opportunities: ${error.message}`);
-  }
+  if (error) throwQueryError("Failed to load opportunities", error);
 
   const rows = ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
   return { rows, total: count ?? rows.length, configured: true };
+}
+
+/** The most recently published opportunities, for the homepage. */
+export async function getLatestOpportunities(limit = 4): Promise<OpportunitySummary[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const sb = publicClient();
+  const { data, error } = await sb
+    .from("opportunities")
+    .select(LIST_SELECT)
+    .eq("tr.locale", "en")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  if (error) throwQueryError("Failed to load latest opportunities", error);
+  return ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
+}
+
+/**
+ * Opportunities whose application deadline is on or after `today`, soonest
+ * first. `today` is passed in (as yyyy-mm-dd) so the caller controls the
+ * request-time clock read. A `.gte` on a date column also drops NULL deadlines.
+ */
+export async function getUpcomingDeadlines(
+  today: string,
+  limit = 4,
+): Promise<OpportunitySummary[]> {
+  if (!isSupabaseConfigured) return [];
+
+  const sb = publicClient();
+  const { data, error } = await sb
+    .from("opportunities")
+    .select(LIST_SELECT)
+    .eq("tr.locale", "en")
+    .gte("application_end_date", today)
+    .order("application_end_date", { ascending: true })
+    .limit(limit);
+
+  if (error) throwQueryError("Failed to load upcoming deadlines", error);
+  return ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
 }
 
 type RawDetailRow = {
@@ -282,9 +333,7 @@ export const getOpportunityBySlug = cache(
       .eq("slug", slug)
       .maybeSingle();
 
-    if (error) {
-      throw new Error(`Failed to load opportunity: ${error.message}`);
-    }
+    if (error) throwQueryError("Failed to load opportunity", error);
     if (!data) return null;
 
     const row = data as unknown as RawDetailRow;
