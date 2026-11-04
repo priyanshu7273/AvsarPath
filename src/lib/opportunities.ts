@@ -194,6 +194,20 @@ export function opportunitiesHref(filters: Partial<OpportunityFilters>): string 
   return query ? `/opportunities?${query}` : "/opportunities";
 }
 
+/** Build an /eligibility URL from the qualification-first filter subset. */
+export function eligibilityHref(filters: {
+  qualification?: string;
+  state?: string;
+  category?: string;
+}): string {
+  const params = new URLSearchParams();
+  if (filters.qualification) params.set("qualification", filters.qualification);
+  if (filters.state) params.set("state", filters.state);
+  if (filters.category) params.set("category", filters.category);
+  const query = params.toString();
+  return query ? `/eligibility?${query}` : "/eligibility";
+}
+
 /** True when any narrowing filter (not counting sort/page) is active. */
 export function hasActiveFilters(filters: OpportunityFilters): boolean {
   return Boolean(

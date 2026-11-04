@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { connection } from "next/server";
 
 import {
   EVENT_TYPE_LABELS,
@@ -53,6 +54,8 @@ export default function Page({ params }: PageProps<"/opportunities/[slug]">) {
 async function OpportunityDetailView({
   params,
 }: Pick<PageProps<"/opportunities/[slug]">, "params">) {
+  // Request-time: the detail comes from live data keyed by the URL slug.
+  await connection();
   const { slug } = await params;
   const opp = await getOpportunityBySlug(slug);
 

@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
+import { connection } from "next/server";
 
 import { EmptyState } from "@/components/empty-state";
 import { OpportunityCard } from "@/components/opportunity-card";
@@ -37,6 +38,8 @@ export default function Page({ searchParams }: PageProps<"/opportunities">) {
 }
 
 async function Results({ searchParams }: Pick<PageProps<"/opportunities">, "searchParams">) {
+  // Request-time: these results depend on live data and the URL's filters.
+  await connection();
   const filters = parseOpportunityFilters(await searchParams);
 
   if (!isSupabaseConfigured) {
