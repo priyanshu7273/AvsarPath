@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import type { Metadata } from "next";
 
 import { EmptyState } from "@/components/empty-state";
@@ -10,6 +11,9 @@ export const metadata: Metadata = {
   title: "Saved",
   description: "Opportunities you've saved on AvsarPath.",
 };
+
+// Reads the session; render dynamically (no useful static shell to prerender).
+export const instant = false;
 
 export default function Page() {
   return (
@@ -31,6 +35,7 @@ export default function Page() {
 }
 
 async function SavedList() {
+  await connection();
   await requireUser("/saved");
   const rows = await getSavedOpportunities();
 

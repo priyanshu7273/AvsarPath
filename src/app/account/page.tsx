@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import type { Metadata } from "next";
 
 import { DeleteAccount } from "@/components/delete-account";
@@ -9,6 +10,9 @@ export const metadata: Metadata = {
   title: "Account",
   description: "Your AvsarPath account settings.",
 };
+
+// Reads the session; render dynamically (no useful static shell to prerender).
+export const instant = false;
 
 const PROVIDER_LABELS: Record<string, string> = { github: "GitHub", google: "Google" };
 
@@ -26,6 +30,7 @@ export default function Page() {
 }
 
 async function AccountContent() {
+  await connection();
   const user = await requireUser("/account");
   const profile = await getProfile();
   const provider = (user.app_metadata?.provider as string | undefined) ?? "";

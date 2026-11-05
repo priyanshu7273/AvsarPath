@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import type { User } from "@supabase/supabase-js";
 
 import { signOut } from "@/app/auth/actions";
@@ -7,6 +8,7 @@ import { getSessionUser } from "@/lib/auth";
 const itemClass = "rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted";
 
 export async function AccountMenu() {
+  await connection();
   const user = await getSessionUser();
 
   if (!user) {

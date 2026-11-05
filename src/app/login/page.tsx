@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import type { Metadata } from "next";
 
 import { SignInButtons } from "@/components/sign-in-buttons";
@@ -11,6 +12,9 @@ export const metadata: Metadata = {
   title: "Sign in",
   description: "Sign in to AvsarPath to save opportunities and track your applications.",
 };
+
+// Reads the session to redirect already-signed-in users; render dynamically.
+export const instant = false;
 
 export default function Page({ searchParams }: PageProps<"/login">) {
   return (
@@ -45,6 +49,7 @@ export default function Page({ searchParams }: PageProps<"/login">) {
 }
 
 async function LoginInner({ searchParams }: Pick<PageProps<"/login">, "searchParams">) {
+  await connection();
   const sp = await searchParams;
   const next = typeof sp.next === "string" && sp.next.startsWith("/") ? sp.next : undefined;
   const error = typeof sp.error === "string" ? sp.error : undefined;

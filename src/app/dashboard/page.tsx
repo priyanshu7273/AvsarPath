@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { connection } from "next/server";
 import type { Metadata } from "next";
 
 import { EmptyState } from "@/components/empty-state";
@@ -13,6 +14,10 @@ export const metadata: Metadata = {
   description: "Your saved opportunities and application tracking.",
 };
 
+// This route always reads the session, so there is no useful static shell to
+// prerender; render it dynamically (opts out of instant-navigation validation).
+export const instant = false;
+
 export default function Page() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -24,6 +29,7 @@ export default function Page() {
 }
 
 async function DashboardContent() {
+  await connection();
   const user = await requireUser("/dashboard");
   const [profile, saved, tracked] = await Promise.all([
     getProfile(),
