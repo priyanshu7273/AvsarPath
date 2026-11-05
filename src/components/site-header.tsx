@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import Link from "next/link";
 
+import { AccountMenu } from "@/components/account-menu";
 import { primaryNav, site } from "@/lib/site";
 
 export function SiteHeader() {
@@ -13,21 +15,27 @@ export function SiteHeader() {
           </span>
         </Link>
 
-        {/* Desktop navigation */}
-        <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
-          {primaryNav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex items-center gap-4 md:gap-6">
+          {/* Desktop navigation */}
+          <nav className="hidden items-center gap-6 md:flex" aria-label="Primary">
+            {primaryNav.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </nav>
 
-        {/* Mobile navigation (CSS-only disclosure, no JS) */}
-        <details className="relative md:hidden">
+          {/* Auth state reads the session, so it streams in behind Suspense */}
+          <Suspense fallback={<div className="h-8 w-16" aria-hidden />}>
+            <AccountMenu />
+          </Suspense>
+
+          {/* Mobile navigation (CSS-only disclosure, no JS) */}
+          <details className="relative md:hidden">
           <summary
             className="flex cursor-pointer list-none items-center rounded-md border border-border p-2 text-foreground [&::-webkit-details-marker]:hidden"
             aria-label="Open menu"
@@ -61,7 +69,8 @@ export function SiteHeader() {
               </Link>
             ))}
           </nav>
-        </details>
+          </details>
+        </div>
       </div>
     </header>
   );

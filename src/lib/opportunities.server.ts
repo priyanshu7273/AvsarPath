@@ -281,6 +281,21 @@ export async function getUpcomingDeadlines(
   return ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
 }
 
+/** Public opportunity summaries for a set of ids (order not preserved). */
+export async function getOpportunitiesByIds(ids: string[]): Promise<OpportunitySummary[]> {
+  if (!isSupabaseConfigured || ids.length === 0) return [];
+
+  const sb = publicClient();
+  const { data, error } = await sb
+    .from("opportunities")
+    .select(LIST_SELECT)
+    .eq("tr.locale", "en")
+    .in("id", ids);
+
+  if (error) throwQueryError("Failed to load opportunities", error);
+  return ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
+}
+
 type RawDetailRow = {
   slug: string;
   title: string;

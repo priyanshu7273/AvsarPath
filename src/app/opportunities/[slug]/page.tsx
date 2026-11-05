@@ -13,7 +13,11 @@ import {
   type OpportunityDetail,
 } from "@/lib/opportunities";
 import { getOpportunityBySlug } from "@/lib/opportunities.server";
+import { getTrackingStatus, isSaved } from "@/lib/account.server";
+import { getSessionUser } from "@/lib/auth";
 import { JsonLd } from "@/components/json-ld";
+import { SaveButton } from "@/components/save-button";
+import { TrackingControl } from "@/components/tracking-control";
 import { env } from "@/lib/env";
 
 export async function generateMetadata({
@@ -68,6 +72,11 @@ async function OpportunityDetailView({
   const keyEvents = opp.events
     .filter((e) => e.eventType !== "application_start" && e.eventType !== "application_end")
     .sort(byEventDate);
+
+  const user = await getSessionUser();
+  const [saved, trackingStatus] = user
+    ? await Promise.all([isSaved(opp.id), getTrackingStatus(opp.id)])
+    : ([false, null] as const);
 
   return (
     <article className="mx-auto max-w-4xl px-4 py-8">
@@ -167,6 +176,23 @@ async function OpportunityDetailView({
         </div>
 
         <aside className="space-y-4">
+          {user ? (
+            <div className="space-y-3 rounded-xl border border-border bg-card p-5">
+              <SaveButton opportunityId={opp.id} initialSaved={saved} />
+              <TrackingControl opportunityId={opp.id} initialStatus={trackingStatus} />
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
+              <Link
+                href={`/login?next=/opportunities/${opp.slug}`}
+                className="font-medium text-primary hover:underline"
+              >
+                Sign in
+              </Link>{" "}
+              to save this opportunity or track your application.
+            </div>
+          )}
+
           <div className="rounded-xl border border-border bg-card p-5">
             <h2 className="text-sm font-semibold text-foreground">Key facts</h2>
             <dl className="mt-3 space-y-2 text-sm">

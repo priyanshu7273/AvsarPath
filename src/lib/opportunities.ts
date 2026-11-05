@@ -55,6 +55,26 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+export const APPLICATION_STATUSES = [
+  "interested",
+  "planning_to_apply",
+  "applied",
+  "admit_card_released",
+  "examination_completed",
+  "result_declared",
+] as const;
+
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
+
+export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
+  interested: "Interested",
+  planning_to_apply: "Planning to apply",
+  applied: "Applied",
+  admit_card_released: "Admit card released",
+  examination_completed: "Exam completed",
+  result_declared: "Result declared",
+};
+
 /** How many results to show per page. */
 export const PAGE_SIZE = 12;
 
