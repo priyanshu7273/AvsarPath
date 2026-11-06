@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 import { isSupabaseConfigured } from "@/lib/env";
@@ -37,6 +37,29 @@ export type Profile = {
   localePreference: string;
   createdAt: string;
 };
+
+/** True when the current user is signed in AND has the admin role. */
+export async function isAdmin(): Promise<boolean> {
+  const profile = await getProfile();
+  return profile?.role === "admin";
+}
+
+/**
+ * Require an admin. Signed-out users are sent to /login; signed-in non-admins
+ * get a 404 so the admin area never reveals itself. Returns the admin User.
+ * Called at the top of every admin page AND re-checked inside every admin
+ * Server Action (POST endpoints are reachable directly — never trust the UI).
+ */
+export async function requireAdmin(next?: string): Promise<User> {
+  const user = await getSessionUser();
+  if (!user) {
+    redirect(`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`);
+  }
+  if (!(await isAdmin())) {
+    notFound();
+  }
+  return user;
+}
 
 /** The current user's profile row (auto-created by a DB trigger on sign-up). */
 export async function getProfile(): Promise<Profile | null> {

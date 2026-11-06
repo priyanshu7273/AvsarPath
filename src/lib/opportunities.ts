@@ -55,6 +55,56 @@ export const EVENT_TYPE_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+// ---------------------------------------------------------------------------
+// Admin-form enums (match the Postgres enum types in the schema). These live in
+// this PURE module so both the Server Actions and the client form components can
+// import them without pulling in "server-only" code.
+// ---------------------------------------------------------------------------
+
+export const VERIFICATION_STATUSES = [
+  "pending_verification",
+  "verified",
+  "needs_review",
+  "updated",
+  "expired",
+  "cancelled",
+] as const;
+
+export type VerificationStatus = (typeof VERIFICATION_STATUSES)[number];
+
+export const VERIFICATION_STATUS_LABELS: Record<VerificationStatus, string> = {
+  pending_verification: "Pending verification",
+  verified: "Verified",
+  needs_review: "Needs review",
+  updated: "Updated",
+  expired: "Expired",
+  cancelled: "Cancelled",
+};
+
+export const EXAM_EVENT_TYPES = [
+  "application_start",
+  "application_end",
+  "exam",
+  "admit_card",
+  "result",
+  "answer_key",
+  "interview",
+  "notice",
+  "other",
+] as const;
+
+export type ExamEventType = (typeof EXAM_EVENT_TYPES)[number];
+
+export const DATE_STATUSES = ["official", "tentative", "expected"] as const;
+
+export type DateStatus = (typeof DATE_STATUSES)[number];
+
+export const DATE_STATUS_LABELS: Record<DateStatus, string> = {
+  official: "Official",
+  tentative: "Tentative",
+  expected: "Expected",
+};
+
 export const APPLICATION_STATUSES = [
   "interested",
   "planning_to_apply",
@@ -255,4 +305,17 @@ export function formatDate(value: string | null | undefined): string | null {
     month: "short",
     year: "numeric",
   });
+}
+
+/**
+ * Turn a title into a URL-safe slug: lowercase, ASCII words joined by hyphens.
+ * Used to suggest (not force) a translation slug in the admin form; the admin
+ * can edit it, and the DB's unique(locale, slug) constraint is the real guard.
+ */
+export function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
 }

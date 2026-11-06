@@ -3,13 +3,15 @@ import { connection } from "next/server";
 import type { User } from "@supabase/supabase-js";
 
 import { signOut } from "@/app/auth/actions";
-import { getSessionUser } from "@/lib/auth";
+import { getProfile, getSessionUser } from "@/lib/auth";
 
 const itemClass = "rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted";
 
 export async function AccountMenu() {
   await connection();
   const user = await getSessionUser();
+  const profile = user ? await getProfile() : null;
+  const isAdmin = profile?.role === "admin";
 
   if (!user) {
     return (
@@ -48,6 +50,11 @@ export async function AccountMenu() {
         <Link href="/account" className={itemClass}>
           Account
         </Link>
+        {isAdmin ? (
+          <Link href="/admin" className={`${itemClass} text-primary`}>
+            Admin
+          </Link>
+        ) : null}
         <form action={signOut}>
           <button type="submit" className={`${itemClass} w-full text-left`}>
             Sign out
