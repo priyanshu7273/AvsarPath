@@ -171,6 +171,11 @@ export type OpportunitySummary = {
   status: OpportunityStatus;
   qualificationText: string | null;
   ageLimit: string | null;
+  /**
+   * Total vacancies. SOURCE OF TRUTH is the sum of this opportunity's posts; this
+   * falls back to `opportunities.vacancies` only when there are no posts. Computed
+   * at read time (never cached) so it can't drift. Null when neither is known.
+   */
   vacancies: number | null;
   applicationEndDate: string | null;
   organisation: { name: string; slug: string } | null;
@@ -178,6 +183,29 @@ export type OpportunitySummary = {
   state: { name: string; slug: string; code: string } | null;
   qualifications: { slug: string; name: string; rank: number }[];
 };
+
+/** One post (role) within an opportunity, with its own vacancy count. */
+export type OpportunityPost = {
+  id: string;
+  name: string;
+  department: string | null;
+  vacancies: number | null;
+  payLevel: string | null;
+  eligibility: string | null;
+  ageLimit: string | null;
+};
+
+/**
+ * Total vacancies for a set of posts, or null when none of them specify a count.
+ * This is the authoritative vacancy figure whenever an opportunity has posts.
+ */
+export function sumPostVacancies(posts: { vacancies: number | null }[]): number | null {
+  const counts = posts
+    .map((p) => p.vacancies)
+    .filter((v): v is number => typeof v === "number");
+  if (counts.length === 0) return null;
+  return counts.reduce((a, b) => a + b, 0);
+}
 
 export type ExamEvent = {
   eventType: string;
@@ -201,7 +229,13 @@ export type OpportunityDetail = {
   selectionProcess: string | null;
   applicationInstructions: string | null;
   requiredDocuments: string | null;
+  /** Raw opportunity-level vacancy count; a fallback used only when there are no posts. */
   vacancies: number | null;
+  /**
+   * Authoritative total: sum of post vacancies when the opportunity has posts,
+   * else `vacancies`. Computed at read time; null when neither is known.
+   */
+  totalVacancies: number | null;
   applicationStartDate: string | null;
   applicationEndDate: string | null;
   publicationDate: string | null;
@@ -214,6 +248,7 @@ export type OpportunityDetail = {
   category: { name: string; slug: string } | null;
   state: { name: string; slug: string; code: string } | null;
   qualifications: { slug: string; name: string; rank: number }[];
+  posts: OpportunityPost[];
   events: ExamEvent[];
 };
 

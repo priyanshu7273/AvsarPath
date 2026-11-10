@@ -116,6 +116,17 @@ export type AdminExamEvent = {
   dateStatus: DateStatus;
 };
 
+export type AdminPost = {
+  id: string;
+  name: string;
+  department: string | null;
+  vacancies: number | null;
+  payLevel: string | null;
+  eligibility: string | null;
+  ageLimit: string | null;
+  sortOrder: number;
+};
+
 /** The full record behind the edit form: core fields + English text + events + quals. */
 export type AdminOpportunityRecord = {
   id: string;
@@ -149,6 +160,7 @@ export type AdminOpportunityRecord = {
   // Relations
   qualificationIds: string[];
   events: AdminExamEvent[];
+  posts: AdminPost[];
 };
 
 const RECORD_SELECT = `
@@ -160,6 +172,7 @@ const RECORD_SELECT = `
     eligibility, age_limit, application_fee, salary, selection_process,
     application_instructions, required_documents ),
   events:exam_events ( id, event_type, title, event_date, date_status ),
+  posts:opportunity_posts ( id, name, department, vacancies, pay_level, eligibility, age_limit, sort_order ),
   quals:opportunity_qualifications ( qualification_id )
 `;
 
@@ -181,6 +194,7 @@ export async function getOpportunityForAdmin(
   const translations = (row.tr ?? []) as Record<string, unknown>[];
   const en = translations.find((t) => t.locale === "en") ?? {};
   const events = (row.events ?? []) as Record<string, unknown>[];
+  const posts = (row.posts ?? []) as Record<string, unknown>[];
   const quals = (row.quals ?? []) as { qualification_id: string }[];
 
   return {
@@ -219,6 +233,18 @@ export async function getOpportunityForAdmin(
       eventDate: (e.event_date as string | null) ?? null,
       dateStatus: e.date_status as DateStatus,
     })),
+    posts: posts
+      .map((p) => ({
+        id: p.id as string,
+        name: p.name as string,
+        department: (p.department as string | null) ?? null,
+        vacancies: (p.vacancies as number | null) ?? null,
+        payLevel: (p.pay_level as string | null) ?? null,
+        eligibility: (p.eligibility as string | null) ?? null,
+        ageLimit: (p.age_limit as string | null) ?? null,
+        sortOrder: (p.sort_order as number) ?? 0,
+      }))
+      .sort((a, b) => a.sortOrder - b.sortOrder),
   };
 }
 

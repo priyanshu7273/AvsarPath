@@ -360,3 +360,62 @@ export async function deleteExamEvent(formData: FormData): Promise<void> {
   revalidatePublic();
   redirect(`/admin/opportunities/${id}#events`);
 }
+
+export async function addPost(formData: FormData): Promise<void> {
+  const admin = await requireAdmin("/admin");
+  const id = str(formData, "id");
+  if (!id) return;
+
+  const name = str(formData, "post_name");
+  if (!name) return; // name is required
+
+  let vacancies: number | null = null;
+  const vacanciesRaw = str(formData, "post_vacancies");
+  if (vacanciesRaw !== null) {
+    const n = Number.parseInt(vacanciesRaw, 10);
+    if (Number.isFinite(n) && n >= 0) vacancies = n;
+  }
+
+  const sb = adminClient();
+  // Append after the current last post.
+  const { data: last } = await sb
+    .from("opportunity_posts")
+    .select("sort_order")
+    .eq("opportunity_id", id)
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const sortOrder = ((last?.sort_order as number | undefined) ?? -1) + 1;
+
+  await sb.from("opportunity_posts").insert({
+    opportunity_id: id,
+    name,
+    department: str(formData, "post_department"),
+    vacancies,
+    pay_level: str(formData, "post_pay_level"),
+    eligibility: str(formData, "post_eligibility"),
+    age_limit: str(formData, "post_age_limit"),
+    sort_order: sortOrder,
+  });
+
+  await writeAuditLog({ adminId: admin.id, opportunityId: id, action: "update" });
+
+  revalidatePath(`/admin/opportunities/${id}`);
+  revalidatePublic();
+  redirect(`/admin/opportunities/${id}#posts`);
+}
+
+export async function deletePost(formData: FormData): Promise<void> {
+  const admin = await requireAdmin("/admin");
+  const id = str(formData, "id");
+  const postId = str(formData, "post_id");
+  if (!id || !postId) return;
+
+  const sb = adminClient();
+  await sb.from("opportunity_posts").delete().eq("id", postId).eq("opportunity_id", id);
+  await writeAuditLog({ adminId: admin.id, opportunityId: id, action: "update" });
+
+  revalidatePath(`/admin/opportunities/${id}`);
+  revalidatePublic();
+  redirect(`/admin/opportunities/${id}#posts`);
+}

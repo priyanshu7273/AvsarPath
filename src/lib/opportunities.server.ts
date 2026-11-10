@@ -8,10 +8,12 @@ import {
   CENTRAL_STATE,
   PAGE_SIZE,
   emptyFilterOptions,
+  sumPostVacancies,
   type FilterOptions,
   type LookupOption,
   type OpportunityDetail,
   type OpportunityFilters,
+  type OpportunityPost,
   type OpportunitySummary,
   type QualificationOption,
   type StateOption,
@@ -45,7 +47,8 @@ const LIST_SELECT = `
   category:categories ( name, slug ),
   state:states ( name, code, slug ),
   tr:opportunity_translations!inner ( slug, title, qualification, age_limit ),
-  quals:opportunity_qualifications ( qualification:qualifications ( slug, name, rank ) )
+  quals:opportunity_qualifications ( qualification:qualifications ( slug, name, rank ) ),
+  posts:opportunity_posts ( vacancies )
 `;
 
 const DETAIL_SELECT = `
@@ -78,6 +81,7 @@ const DETAIL_SELECT = `
     category:categories ( name, slug ),
     state:states ( name, code, slug ),
     quals:opportunity_qualifications ( qualification:qualifications ( slug, name, rank ) ),
+    posts:opportunity_posts ( id, name, department, vacancies, pay_level, eligibility, age_limit, sort_order ),
     events:exam_events ( event_type, title, event_date, date_status )
   )
 `;
@@ -97,6 +101,7 @@ type RawListRow = {
   state: { name: string; slug: string; code: string } | null;
   tr: { slug: string; title: string; qualification: string | null; age_limit: string | null }[];
   quals: QualRel[];
+  posts: { vacancies: number | null }[];
 };
 
 function sortedQualifications(
@@ -110,6 +115,10 @@ function sortedQualifications(
 
 function mapSummary(row: RawListRow): OpportunitySummary {
   const tr = row.tr?.[0];
+  const posts = row.posts ?? [];
+  // Posts are the source of truth for vacancies; fall back to the opportunity's
+  // own count only when it has no post breakdown.
+  const vacancies = posts.length > 0 ? sumPostVacancies(posts) : row.vacancies;
   return {
     id: row.id,
     slug: tr?.slug ?? "",
@@ -118,7 +127,7 @@ function mapSummary(row: RawListRow): OpportunitySummary {
     status: row.opportunity_status,
     qualificationText: tr?.qualification ?? null,
     ageLimit: tr?.age_limit ?? null,
-    vacancies: row.vacancies,
+    vacancies,
     applicationEndDate: row.application_end_date,
     organisation: row.organisation,
     category: row.category,
@@ -326,6 +335,16 @@ type RawDetailRow = {
     category: Rel;
     state: { name: string; slug: string; code: string } | null;
     quals: QualRel[];
+    posts: {
+      id: string;
+      name: string;
+      department: string | null;
+      vacancies: number | null;
+      pay_level: string | null;
+      eligibility: string | null;
+      age_limit: string | null;
+      sort_order: number;
+    }[];
     events: {
       event_type: string;
       title: string | null;
@@ -354,6 +373,22 @@ export const getOpportunityBySlug = cache(
     const row = data as unknown as RawDetailRow;
     const o = row.opportunity;
 
+    const posts: OpportunityPost[] = (o.posts ?? [])
+      .slice()
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        department: p.department,
+        vacancies: p.vacancies,
+        payLevel: p.pay_level,
+        eligibility: p.eligibility,
+        ageLimit: p.age_limit,
+      }));
+    // Posts are the source of truth; fall back to the opportunity's own count
+    // only when there is no post breakdown.
+    const totalVacancies = posts.length > 0 ? sumPostVacancies(posts) : o.vacancies;
+
     return {
       id: o.id,
       slug: row.slug,
@@ -370,6 +405,7 @@ export const getOpportunityBySlug = cache(
       applicationInstructions: row.application_instructions,
       requiredDocuments: row.required_documents,
       vacancies: o.vacancies,
+      totalVacancies,
       applicationStartDate: o.application_start_date,
       applicationEndDate: o.application_end_date,
       publicationDate: o.publication_date,
@@ -382,6 +418,7 @@ export const getOpportunityBySlug = cache(
       category: o.category,
       state: o.state,
       qualifications: sortedQualifications(o.quals ?? []),
+      posts,
       events: (o.events ?? []).map((e) => ({
         eventType: e.event_type,
         title: e.title,

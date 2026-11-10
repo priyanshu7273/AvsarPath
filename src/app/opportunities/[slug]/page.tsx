@@ -117,6 +117,39 @@ async function OpportunityDetailView({
             <Prose value={opp.description} />
           </Block>
 
+          {opp.posts.length > 0 ? (
+            <Block title="Posts & vacancies">
+              <p className="mb-3 text-sm text-muted-foreground">
+                {opp.totalVacancies !== null
+                  ? `${opp.totalVacancies.toLocaleString("en-IN")} total ${
+                      opp.totalVacancies === 1 ? "vacancy" : "vacancies"
+                    } across ${opp.posts.length} ${opp.posts.length === 1 ? "post" : "posts"}.`
+                  : `${opp.posts.length} ${opp.posts.length === 1 ? "post" : "posts"}.`}
+              </p>
+              <ul className="space-y-4">
+                {opp.posts.map((p) => (
+                  <li key={p.id} className="rounded-lg border border-border bg-card p-4">
+                    <h3 className="text-sm font-semibold text-foreground">{p.name}</h3>
+                    {p.department ? (
+                      <p className="text-xs text-muted-foreground">{p.department}</p>
+                    ) : null}
+                    <dl className="mt-3 space-y-2 text-sm">
+                      <Field
+                        label="Vacancies"
+                        value={
+                          typeof p.vacancies === "number" ? p.vacancies.toLocaleString("en-IN") : null
+                        }
+                      />
+                      <Field label="Pay level" value={p.payLevel} />
+                      <Field label="Eligibility" value={p.eligibility} />
+                      <Field label="Age limit" value={p.ageLimit} />
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+            </Block>
+          ) : null}
+
           <Block title="Eligibility">
             <dl className="space-y-3 text-sm">
               <Field label="Qualification" value={opp.qualificationText} />
@@ -202,8 +235,8 @@ async function OpportunityDetailView({
               <Field
                 label="Vacancies"
                 value={
-                  typeof opp.vacancies === "number"
-                    ? opp.vacancies.toLocaleString("en-IN")
+                  typeof opp.totalVacancies === "number"
+                    ? opp.totalVacancies.toLocaleString("en-IN")
                     : null
                 }
               />
@@ -331,6 +364,9 @@ function buildStructuredData(opp: OpportunityDetail, siteUrl: string): object[] 
       description: opp.description ?? opp.title,
       datePosted,
       ...(opp.applicationEndDate ? { validThrough: opp.applicationEndDate } : {}),
+      ...(typeof opp.totalVacancies === "number"
+        ? { totalJobOpenings: opp.totalVacancies }
+        : {}),
       hiringOrganization: {
         "@type": "Organization",
         name: opp.organisation.name,

@@ -10,6 +10,7 @@ import {
   type OpportunityFormDefaults,
 } from "@/components/admin/opportunity-form";
 import { ExamEventsEditor } from "@/components/admin/exam-events-editor";
+import { PostsEditor } from "@/components/admin/posts-editor";
 import { PublishControls } from "@/components/admin/publish-controls";
 import { requireAdmin } from "@/lib/auth";
 import { getOpportunityForAdmin, type AdminOpportunityRecord } from "@/lib/admin.server";
@@ -116,6 +117,8 @@ async function EditContent({
         defaults={toDefaults(record)}
         submitLabel="Save changes"
       />
+
+      <PostsEditor opportunityId={record.id} posts={record.posts} />
 
       <ExamEventsEditor opportunityId={record.id} events={record.events} />
     </div>

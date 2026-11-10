@@ -316,7 +316,12 @@ export function OpportunityForm({
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-foreground">Dates, vacancies &amp; links</h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Vacancies" name="vacancies" type="number" defaultValue={defaults.vacancies} />
+          <Field
+            label="Total vacancies (fallback — used only when no posts are listed)"
+            name="vacancies"
+            type="number"
+            defaultValue={defaults.vacancies}
+          />
           <Field label="Publication date" name="publication_date" type="date" defaultValue={defaults.publication_date} />
           <Field label="Application starts" name="application_start_date" type="date" defaultValue={defaults.application_start_date} />
           <Field label="Last date to apply" name="application_end_date" type="date" defaultValue={defaults.application_end_date} />
