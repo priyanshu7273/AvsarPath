@@ -25,6 +25,8 @@ export type OpportunityFormOptions = {
 
 export type OpportunityFormDefaults = {
   id?: string;
+  /** When set, this create came from a staged review item; linked on save. */
+  from_item?: string;
   opportunity_type: string;
   opportunity_status: string;
   verification_status: string;
@@ -169,6 +171,7 @@ export function OpportunityForm({
   return (
     <form action={formAction} className="space-y-8">
       {defaults.id ? <input type="hidden" name="id" value={defaults.id} /> : null}
+      {defaults.from_item ? <input type="hidden" name="from_item" value={defaults.from_item} /> : null}
 
       {state.error ? (
         <p
@@ -348,7 +351,7 @@ export function OpportunityForm({
                 type="checkbox"
                 name="qualifications"
                 value={q.id}
-                defaultChecked={defaults.qualificationIds.includes(q.id)}
+                defaultChecked={(defaults.qualificationIds ?? []).includes(q.id)}
                 className="h-4 w-4 accent-[var(--color-primary)]"
               />
               {q.name}

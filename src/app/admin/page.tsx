@@ -4,7 +4,7 @@ import { connection } from "next/server";
 import type { Metadata } from "next";
 
 import { requireAdmin } from "@/lib/auth";
-import { getAdminCounts, listOpportunitiesForAdmin } from "@/lib/admin.server";
+import { getAdminCounts, getReviewCount, listOpportunitiesForAdmin } from "@/lib/admin.server";
 import {
   STATUS_LABELS,
   TYPE_LABELS,
@@ -53,7 +53,11 @@ async function AdminContent({ searchParams }: Pick<PageProps<"/admin">, "searchP
   const q = typeof sp.q === "string" ? sp.q : undefined;
   const notice = typeof sp.deleted === "string" ? "Opportunity deleted." : undefined;
 
-  const [counts, rows] = await Promise.all([getAdminCounts(), listOpportunitiesForAdmin(q)]);
+  const [counts, rows, reviewCount] = await Promise.all([
+    getAdminCounts(),
+    listOpportunitiesForAdmin(q),
+    getReviewCount(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -68,6 +72,18 @@ async function AdminContent({ searchParams }: Pick<PageProps<"/admin">, "searchP
         <span className="rounded-lg border border-border bg-card px-4 py-2 text-foreground">
           <strong className="font-semibold">{counts.drafts}</strong> drafts
         </span>
+        <Link
+          href="/admin/sources"
+          className="rounded-lg border border-border bg-card px-4 py-2 font-medium text-foreground transition-colors hover:border-primary/40"
+        >
+          Sources
+        </Link>
+        <Link
+          href="/admin/review"
+          className="rounded-lg border border-border bg-card px-4 py-2 font-medium text-foreground transition-colors hover:border-primary/40"
+        >
+          Review{reviewCount > 0 ? <span className="ml-1 text-primary">({reviewCount})</span> : null}
+        </Link>
       </div>
 
       <form method="get" className="flex gap-2">

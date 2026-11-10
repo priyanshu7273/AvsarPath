@@ -190,6 +190,16 @@ export async function createOpportunity(
   await setQualifications(id, parsed.qualificationIds);
   await writeAuditLog({ adminId: admin.id, opportunityId: id, action: "create", newValues: parsed.core });
 
+  // If this draft was imported from a staged review item, close the loop.
+  const fromItem = str(formData, "from_item");
+  if (fromItem) {
+    await sb
+      .from("source_items")
+      .update({ item_status: "imported", imported_opportunity_id: id })
+      .eq("id", fromItem);
+    revalidatePath("/admin/review");
+  }
+
   revalidatePath("/admin");
   redirect(`/admin/opportunities/${id}?saved=1`);
 }

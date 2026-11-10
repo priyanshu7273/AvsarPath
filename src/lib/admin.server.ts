@@ -8,6 +8,7 @@ import type {
   OpportunityType,
   VerificationStatus,
 } from "@/lib/opportunities";
+import type { SourceAccessMethod, SourceStatus } from "@/lib/ingest";
 
 /**
  * Admin data access. Every function here runs through the SERVICE-ROLE client,
@@ -246,6 +247,171 @@ export async function getOpportunityForAdmin(
       }))
       .sort((a, b) => a.sortOrder - b.sortOrder),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Content sources + review queue (ingestion)
+// ---------------------------------------------------------------------------
+
+export type AdminSource = {
+  id: string;
+  sourceName: string;
+  sourceUrl: string | null;
+  feedUrl: string | null;
+  accessMethod: SourceAccessMethod;
+  status: SourceStatus;
+  robotsAllowed: boolean | null;
+  lastCheckedAt: string | null;
+  notes: string | null;
+  newItemCount: number;
+};
+
+function mapSource(row: Record<string, unknown>, newItemCount: number): AdminSource {
+  return {
+    id: row.id as string,
+    sourceName: row.source_name as string,
+    sourceUrl: (row.source_url as string | null) ?? null,
+    feedUrl: (row.feed_url as string | null) ?? null,
+    accessMethod: row.access_method as SourceAccessMethod,
+    status: row.source_status as SourceStatus,
+    robotsAllowed: (row.robots_allowed as boolean | null) ?? null,
+    lastCheckedAt: (row.last_checked_at as string | null) ?? null,
+    notes: (row.notes as string | null) ?? null,
+    newItemCount,
+  };
+}
+
+const SOURCE_COLUMNS =
+  "id, source_name, source_url, feed_url, access_method, source_status, robots_allowed, last_checked_at, notes";
+
+/** Count of new (un-reviewed) staged items per source id. */
+async function newItemCountsBySource(): Promise<Map<string, number>> {
+  const sb = adminClient();
+  const { data } = await sb.from("source_items").select("source_id").eq("item_status", "new");
+  const counts = new Map<string, number>();
+  for (const r of (data ?? []) as { source_id: string }[]) {
+    counts.set(r.source_id, (counts.get(r.source_id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export async function listSources(): Promise<AdminSource[]> {
+  const sb = adminClient();
+  const [{ data }, counts] = await Promise.all([
+    sb.from("content_sources").select(SOURCE_COLUMNS).order("source_name"),
+    newItemCountsBySource(),
+  ]);
+  return ((data ?? []) as Record<string, unknown>[]).map((r) =>
+    mapSource(r, counts.get(r.id as string) ?? 0),
+  );
+}
+
+export type IngestionRun = {
+  id: string;
+  startedAt: string;
+  finishedAt: string | null;
+  itemsFound: number;
+  itemsNew: number;
+  status: string;
+  error: string | null;
+};
+
+export async function getSource(
+  id: string,
+): Promise<(AdminSource & { recentRuns: IngestionRun[] }) | null> {
+  const sb = adminClient();
+  const { data } = await sb.from("content_sources").select(SOURCE_COLUMNS).eq("id", id).maybeSingle();
+  if (!data) return null;
+
+  const [{ count }, { data: runs }] = await Promise.all([
+    sb
+      .from("source_items")
+      .select("id", { count: "exact", head: true })
+      .eq("source_id", id)
+      .eq("item_status", "new"),
+    sb
+      .from("ingestion_runs")
+      .select("id, started_at, finished_at, items_found, items_new, status, error")
+      .eq("source_id", id)
+      .order("started_at", { ascending: false })
+      .limit(5),
+  ]);
+
+  return {
+    ...mapSource(data as Record<string, unknown>, count ?? 0),
+    recentRuns: ((runs ?? []) as Record<string, unknown>[]).map((r) => ({
+      id: r.id as string,
+      startedAt: r.started_at as string,
+      finishedAt: (r.finished_at as string | null) ?? null,
+      itemsFound: (r.items_found as number) ?? 0,
+      itemsNew: (r.items_new as number) ?? 0,
+      status: r.status as string,
+      error: (r.error as string | null) ?? null,
+    })),
+  };
+}
+
+export type AdminReviewItem = {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  title: string | null;
+  url: string | null;
+  summary: string | null;
+  publishedAt: string | null;
+  fetchedAt: string;
+};
+
+export async function listReviewItems(): Promise<AdminReviewItem[]> {
+  const sb = adminClient();
+  const { data } = await sb
+    .from("source_items")
+    .select("id, source_id, title, url, summary, published_at, fetched_at, source:content_sources ( source_name )")
+    .eq("item_status", "new")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .order("fetched_at", { ascending: false })
+    .limit(200);
+
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    id: r.id as string,
+    sourceId: r.source_id as string,
+    sourceName: ((r.source as { source_name?: string } | null)?.source_name) ?? "Unknown source",
+    title: (r.title as string | null) ?? null,
+    url: (r.url as string | null) ?? null,
+    summary: (r.summary as string | null) ?? null,
+    publishedAt: (r.published_at as string | null) ?? null,
+    fetchedAt: r.fetched_at as string,
+  }));
+}
+
+export async function getSourceItem(id: string): Promise<AdminReviewItem | null> {
+  const sb = adminClient();
+  const { data } = await sb
+    .from("source_items")
+    .select("id, source_id, title, url, summary, published_at, fetched_at, source:content_sources ( source_name )")
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const r = data as Record<string, unknown>;
+  return {
+    id: r.id as string,
+    sourceId: r.source_id as string,
+    sourceName: ((r.source as { source_name?: string } | null)?.source_name) ?? "Unknown source",
+    title: (r.title as string | null) ?? null,
+    url: (r.url as string | null) ?? null,
+    summary: (r.summary as string | null) ?? null,
+    publishedAt: (r.published_at as string | null) ?? null,
+    fetchedAt: r.fetched_at as string,
+  };
+}
+
+export async function getReviewCount(): Promise<number> {
+  const sb = adminClient();
+  const { count } = await sb
+    .from("source_items")
+    .select("id", { count: "exact", head: true })
+    .eq("item_status", "new");
+  return count ?? 0;
 }
 
 /**

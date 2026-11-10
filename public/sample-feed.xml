@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>[DEMO] AvsarPath Sample Feed</title>
+    <link>http://localhost:3000/sample-feed.xml</link>
+    <description>DEMONSTRATION DATA ONLY — fictional items for local ingestion testing. These are NOT real notifications.</description>
+    <language>en-in</language>
+    <item>
+      <title>[DEMO] Sample Assistant Recruitment Notice 2026</title>
+      <link>http://localhost:3000/sample-feed.xml#demo-1</link>
+      <guid isPermaLink="false">avsarpath-demo-item-0001</guid>
+      <pubDate>Mon, 09 Nov 2026 10:00:00 +0530</pubDate>
+      <description>Demonstration item for local testing. Not a real notification. Replace with verified content from official sources before publishing.</description>
+    </item>
+    <item>
+      <title>[DEMO] Sample Technical Officer Advertisement 2026</title>
+      <link>http://localhost:3000/sample-feed.xml#demo-2</link>
+      <guid isPermaLink="false">avsarpath-demo-item-0002</guid>
+      <pubDate>Sun, 08 Nov 2026 09:00:00 +0530</pubDate>
+      <description>Demonstration item for local testing. Not a real notification.</description>
+    </item>
+    <item>
+      <title>[DEMO] Sample Scholarship Call 2026</title>
+      <link>http://localhost:3000/sample-feed.xml#demo-3</link>
+      <guid isPermaLink="false">avsarpath-demo-item-0003</guid>
+      <pubDate>Sat, 07 Nov 2026 08:00:00 +0530</pubDate>
+      <description>Demonstration item for local testing. Not a real notification.</description>
+    </item>
+  </channel>
+</rss>
