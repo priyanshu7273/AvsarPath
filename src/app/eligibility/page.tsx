@@ -20,7 +20,7 @@ import { getFilterOptions, getOpportunities } from "@/lib/opportunities.server";
 export const metadata: Metadata = {
   title: "Eligibility Finder",
   description:
-    "Pick your highest qualification to discover the Indian government jobs, exams, admissions and scholarships you may be eligible for.",
+    "Pick your highest qualification to discover the Indian government jobs and exams you may be eligible for.",
   alternates: { canonical: "/eligibility" },
 };
 

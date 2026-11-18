@@ -9,7 +9,7 @@ export const site = {
   name: "AvsarPath",
   tagline: "Find and track Indian exams, jobs and opportunities",
   description:
-    "AvsarPath is an independent platform that helps students, graduates and job seekers across India discover government jobs, exams, admissions and scholarships — with official sources and verified dates.",
+    "AvsarPath is an independent platform that helps students, graduates and job seekers across India discover government jobs and exams — with official sources and verified dates.",
   // Independent platform — NOT a government website.
   independenceNotice:
     "AvsarPath is an independent information platform and is not affiliated with UPSC, SSC, BPSC, Railway Recruitment Boards or any government authority.",
@@ -28,6 +28,10 @@ export const primaryNav: { label: string; href: string }[] = [
  * Used for navigation and "popular categories" links. The database is the
  * source of truth once populated; these are structural entry points.
  */
+// Launch categories shown as homepage tiles: the government job/exam recruiting
+// bodies we have content for. Entrance-exam and scholarship categories still
+// exist in the database and filters — they're just not surfaced as tiles until
+// they have listings, so no tile leads to an empty result.
 export const categories: { label: string; slug: string }[] = [
   { label: "UPSC", slug: "upsc" },
   { label: "SSC", slug: "ssc" },
@@ -35,8 +39,6 @@ export const categories: { label: string; slug: string }[] = [
   { label: "Railways", slug: "railways" },
   { label: "Defence", slug: "defence" },
   { label: "State PSC (BPSC)", slug: "state-psc" },
-  { label: "Entrance Exams", slug: "entrance-exams" },
-  { label: "Scholarships", slug: "scholarships" },
 ];
 
 /** Qualification levels for the eligibility/discovery entry points. */

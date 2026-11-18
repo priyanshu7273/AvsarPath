@@ -1,6 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
+import { cacheLife, cacheTag } from "next/cache";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { publicClient } from "@/lib/supabase/public";
@@ -305,6 +306,30 @@ export async function getOpportunitiesByIds(ids: string[]): Promise<OpportunityS
   return ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
 }
 
+/**
+ * English slugs of every publicly visible opportunity (RLS returns only
+ * published + verified rows to the anon key), for the sitemap. Cached + tagged
+ * so it refreshes when an admin publishes.
+ */
+export async function getPublishedSlugs(): Promise<{ slug: string; updatedAt: string | null }[]> {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("opportunities");
+  if (!isSupabaseConfigured) return [];
+
+  const sb = publicClient();
+  const { data, error } = await sb
+    .from("opportunity_translations")
+    .select("slug, updated_at")
+    .eq("locale", "en");
+
+  if (error) throwQueryError("Failed to load sitemap slugs", error);
+  return ((data ?? []) as { slug: string; updated_at: string | null }[]).map((r) => ({
+    slug: r.slug,
+    updatedAt: r.updated_at,
+  }));
+}
+
 type RawDetailRow = {
   slug: string;
   title: string;
@@ -354,10 +379,18 @@ type RawDetailRow = {
   };
 };
 
-/** Fetch a single opportunity by its English slug (or null if not public). */
-export const getOpportunityBySlug = cache(
-  async (slug: string): Promise<OpportunityDetail | null> => {
-    if (!isSupabaseConfigured) return null;
+/**
+ * Fetch a single opportunity by its English slug (or null if not public).
+ * Cached per slug and tagged so `generateMetadata` and the page render share one
+ * DB read, and an admin publish/edit can invalidate it via `revalidateTag`.
+ */
+export async function getOpportunityBySlug(
+  slug: string,
+): Promise<OpportunityDetail | null> {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("opportunities", `opportunity:${slug}`);
+  if (!isSupabaseConfigured) return null;
 
     const sb = publicClient();
     const { data, error } = await sb
@@ -426,5 +459,4 @@ export const getOpportunityBySlug = cache(
         dateStatus: e.date_status,
       })),
     };
-  },
-);
+}

@@ -24,7 +24,7 @@ export function SearchBar() {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search jobs, exams, scholarships…"
+          placeholder="Search jobs and exams…"
           className="w-full bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
         />
         <button

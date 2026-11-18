@@ -1,19 +1,22 @@
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { connection } from "next/server";
+import { cacheLife, cacheTag } from "next/cache";
 
 import { EmptyState } from "@/components/empty-state";
 import { OpportunityCard } from "@/components/opportunity-card";
 import { OpportunityFilters } from "@/components/opportunity-filters";
 import { Pagination } from "@/components/pagination";
 import { isSupabaseConfigured } from "@/lib/env";
-import { parseOpportunityFilters } from "@/lib/opportunities";
+import {
+  parseOpportunityFilters,
+  type OpportunityFilters as OpportunityFilterSet,
+} from "@/lib/opportunities";
 import { getFilterOptions, getOpportunities } from "@/lib/opportunities.server";
 
 export const metadata: Metadata = {
   title: "Opportunities",
   description:
-    "Search and filter verified Indian government jobs, exams, admissions and scholarships by qualification, region, department, type and status.",
+    "Search and filter verified Indian government jobs and exams by qualification, region, department, type and status.",
 };
 
 export default function Page({ searchParams }: PageProps<"/opportunities">) {
@@ -38,9 +41,16 @@ export default function Page({ searchParams }: PageProps<"/opportunities">) {
 }
 
 async function Results({ searchParams }: Pick<PageProps<"/opportunities">, "searchParams">) {
-  // Request-time: these results depend on live data and the URL's filters.
-  await connection();
+  // Reading the URL's filters is request-time; the rendered results for a given
+  // filter set are cached (keyed by `filters`) in ResultsList below.
   const filters = parseOpportunityFilters(await searchParams);
+  return <ResultsList filters={filters} />;
+}
+
+async function ResultsList({ filters }: { filters: OpportunityFilterSet }) {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("opportunities");
 
   if (!isSupabaseConfigured) {
     return (

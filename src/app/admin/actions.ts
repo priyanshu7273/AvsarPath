@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth";
@@ -20,8 +20,12 @@ export type FormState = { error?: string };
 
 const PUBLISHABLE = ["verified", "updated"] as const;
 
-// Re-validate the public surfaces an opportunity change can affect.
+// Re-validate the public surfaces an opportunity change can affect. The cached
+// public reads (homepage, listing, detail) are all tagged "opportunities", so
+// invalidating that tag refreshes them with stale-while-revalidate semantics;
+// the path revalidations cover any non-cached segments.
 function revalidatePublic() {
+  revalidateTag("opportunities", "max");
   revalidatePath("/");
   revalidatePath("/opportunities");
   revalidatePath("/eligibility");

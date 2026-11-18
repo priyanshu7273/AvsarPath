@@ -14,15 +14,12 @@ export default function Page() {
         <p>
           {site.name} is an independent information platform that helps
           students, graduates and job seekers across India discover and track
-          exams, government jobs, admissions and scholarships.
+          government exams and jobs.
         </p>
         <p>
           We summarise opportunities in plain language and always link to the
           original official notification. Every published opportunity carries
           its source and a last-verified date. {site.independenceNotice}
-        </p>
-        <p className="text-sm italic">
-          This page is a draft and will be expanded before launch.
         </p>
       </div>
     </div>

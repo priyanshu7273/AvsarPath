@@ -1,14 +1,15 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { connection } from "next/server";
+import { cacheLife, cacheTag } from "next/cache";
 
 import { EmptyState } from "@/components/empty-state";
+import { JsonLd } from "@/components/json-ld";
 import { NewsletterForm } from "@/components/newsletter-form";
 import { OpportunityCard } from "@/components/opportunity-card";
 import { SearchBar } from "@/components/search-bar";
 import { Section } from "@/components/section";
-import { isSupabaseConfigured } from "@/lib/env";
+import { env, isSupabaseConfigured } from "@/lib/env";
 import type { OpportunitySummary } from "@/lib/opportunities";
 import {
   getLatestOpportunities,
@@ -23,6 +24,7 @@ export const metadata: Metadata = {
 export default function Home() {
   return (
     <div>
+      <JsonLd data={siteJsonLd()} />
       {/* Hero — immediately communicates what the site does */}
       <section className="border-b border-border bg-muted/40">
         <div className="mx-auto max-w-6xl px-4 py-14 sm:py-20">
@@ -33,9 +35,8 @@ export default function Home() {
             {site.tagline}
           </h1>
           <p className="mt-4 max-w-2xl text-base text-muted-foreground sm:text-lg">
-            Discover central and state government jobs, exams, admissions and
-            scholarships that match your qualification — and track deadlines so
-            you never miss an opportunity.
+            Discover central and state government jobs and exams that match your
+            qualification — and track deadlines so you never miss one.
           </p>
 
           <div className="mt-6 max-w-2xl">
@@ -160,6 +161,9 @@ export default function Home() {
 }
 
 async function LatestOpportunities() {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("opportunities");
   if (!isSupabaseConfigured) return <EmptyState />;
   const rows = await getLatestOpportunities(4);
   if (rows.length === 0) return <EmptyState />;
@@ -167,14 +171,17 @@ async function LatestOpportunities() {
 }
 
 async function UpcomingDeadlines() {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("opportunities");
   if (!isSupabaseConfigured) {
     return (
       <EmptyState message="No approaching deadlines to show yet. Closing dates will appear here once opportunities are published." />
     );
   }
-  // Read the clock at request time (deferred via connection) so "today" is
-  // resolved per request, not baked into the prerendered shell.
-  await connection();
+  // "today" is resolved inside the cached scope and refreshes with the cache
+  // lifetime — accurate enough for a "deadlines approaching" list, and it keeps
+  // the homepage shell cacheable (no per-request clock read).
   const today = new Date().toISOString().slice(0, 10);
   const rows = await getUpcomingDeadlines(today, 4);
   if (rows.length === 0) {
@@ -193,6 +200,34 @@ function OpportunityGrid({ rows }: { rows: OpportunitySummary[] }) {
       ))}
     </ul>
   );
+}
+
+/** Site-wide Organization + WebSite (with a SearchAction) structured data. */
+function siteJsonLd(): object[] {
+  const base = env.siteUrl.replace(/\/$/, "");
+  return [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: site.name,
+      url: base,
+      description: site.description,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: site.name,
+      url: base,
+      potentialAction: {
+        "@type": "SearchAction",
+        target: {
+          "@type": "EntryPoint",
+          urlTemplate: `${base}/opportunities?q={search_term_string}`,
+        },
+        "query-input": "required name=search_term_string",
+      },
+    },
+  ];
 }
 
 function CardsSkeleton() {

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { connection } from "next/server";
+import { cacheLife, cacheTag } from "next/cache";
 
 import {
   EVENT_TYPE_LABELS,
@@ -55,31 +56,58 @@ export default function Page({ params }: PageProps<"/opportunities/[slug]">) {
   );
 }
 
+/**
+ * Uncached page shell. It owns the layout and composes two kinds of boundary as
+ * SIBLINGS:
+ *  - shared content (header, body, key facts) — each `use cache`, keyed by slug,
+ *    tagged for revalidation, and identical for every visitor;
+ *  - the per-user Save/Track block — streamed per request, never cached.
+ * Nothing per-user is ever passed into a cached scope, so no user's state can be
+ * captured in (or served from) a shared cache entry.
+ */
 async function OpportunityDetailView({
   params,
 }: Pick<PageProps<"/opportunities/[slug]">, "params">) {
-  // Request-time: the detail comes from live data keyed by the URL slug.
-  await connection();
   const { slug } = await params;
+  // Existence check outside any cached scope, so notFound() never runs in `use cache`.
   const opp = await getOpportunityBySlug(slug);
-
   if (!opp) notFound();
-
-  const region = opp.state ? opp.state.name : "All India / Central";
-  const applyHref = usableUrl(opp.applicationUrl);
-  const notificationHref = usableUrl(opp.notificationUrl);
-  // Application window is shown separately, so drop those from the dated list.
-  const keyEvents = opp.events
-    .filter((e) => e.eventType !== "application_start" && e.eventType !== "application_end")
-    .sort(byEventDate);
-
-  const user = await getSessionUser();
-  const [saved, trackingStatus] = user
-    ? await Promise.all([isSaved(opp.id), getTrackingStatus(opp.id)])
-    : ([false, null] as const);
 
   return (
     <article className="mx-auto max-w-4xl px-4 py-8">
+      <CachedArticleHeader slug={slug} />
+
+      <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_18rem]">
+        <CachedArticleBody slug={slug} />
+
+        <aside className="space-y-4">
+          <Suspense
+            fallback={<div className="h-28 rounded-xl border border-border bg-muted/30" aria-hidden />}
+          >
+            <UserActions slug={slug} />
+          </Suspense>
+          <CachedArticleFacts slug={slug} />
+        </aside>
+      </div>
+    </article>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared (cached) content — no session, no cookies, same for everyone.
+// ---------------------------------------------------------------------------
+
+/** Structured data, breadcrumb, title block and the independence notice. */
+async function CachedArticleHeader({ slug }: { slug: string }) {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("opportunities", `opportunity:${slug}`);
+
+  const opp = await getOpportunityBySlug(slug);
+  if (!opp) return null;
+
+  return (
+    <>
       <JsonLd data={buildStructuredData(opp, env.siteUrl)} />
       <nav className="text-sm text-muted-foreground" aria-label="Breadcrumb">
         <Link href="/opportunities" className="hover:text-foreground">
@@ -101,7 +129,7 @@ async function OpportunityDetailView({
         <p className="mt-2 text-sm text-muted-foreground">
           {opp.organisation ? opp.organisation.name : "Recruiting body to be confirmed"}
           <span aria-hidden> · </span>
-          {region}
+          {regionLabel(opp)}
         </p>
       </header>
 
@@ -110,176 +138,235 @@ async function OpportunityDetailView({
         convenience — always confirm every detail on the official notification
         before applying.
       </p>
-
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_18rem]">
-        <div className="space-y-8">
-          <Block title="Overview">
-            <Prose value={opp.description} />
-          </Block>
-
-          {opp.posts.length > 0 ? (
-            <Block title="Posts & vacancies">
-              <p className="mb-3 text-sm text-muted-foreground">
-                {opp.totalVacancies !== null
-                  ? `${opp.totalVacancies.toLocaleString("en-IN")} total ${
-                      opp.totalVacancies === 1 ? "vacancy" : "vacancies"
-                    } across ${opp.posts.length} ${opp.posts.length === 1 ? "post" : "posts"}.`
-                  : `${opp.posts.length} ${opp.posts.length === 1 ? "post" : "posts"}.`}
-              </p>
-              <ul className="space-y-4">
-                {opp.posts.map((p) => (
-                  <li key={p.id} className="rounded-lg border border-border bg-card p-4">
-                    <h3 className="text-sm font-semibold text-foreground">{p.name}</h3>
-                    {p.department ? (
-                      <p className="text-xs text-muted-foreground">{p.department}</p>
-                    ) : null}
-                    <dl className="mt-3 space-y-2 text-sm">
-                      <Field
-                        label="Vacancies"
-                        value={
-                          typeof p.vacancies === "number" ? p.vacancies.toLocaleString("en-IN") : null
-                        }
-                      />
-                      <Field label="Pay level" value={p.payLevel} />
-                      <Field label="Eligibility" value={p.eligibility} />
-                      <Field label="Age limit" value={p.ageLimit} />
-                    </dl>
-                  </li>
-                ))}
-              </ul>
-            </Block>
-          ) : null}
-
-          <Block title="Eligibility">
-            <dl className="space-y-3 text-sm">
-              <Field label="Qualification" value={opp.qualificationText} />
-              <Field label="Age" value={opp.ageLimit} />
-              <Field label="Other conditions" value={opp.eligibility} />
-            </dl>
-            {opp.qualifications.length > 0 ? (
-              <ul className="mt-4 flex flex-wrap gap-2">
-                {opp.qualifications.map((q) => (
-                  <li
-                    key={q.slug}
-                    className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"
-                  >
-                    {q.name}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </Block>
-
-          <Block title="Fees & pay">
-            <dl className="space-y-3 text-sm">
-              <Field label="Application fee" value={opp.applicationFee} />
-              <Field label="Pay / salary" value={opp.salary} />
-            </dl>
-          </Block>
-
-          <Block title="Selection process">
-            <Prose value={opp.selectionProcess} />
-          </Block>
-
-          <Block title="How to apply">
-            <dl className="space-y-3 text-sm">
-              <Field label="Instructions" value={opp.applicationInstructions} />
-              <Field label="Required documents" value={opp.requiredDocuments} />
-            </dl>
-          </Block>
-
-          <Block title="Important dates">
-            <dl className="space-y-3 text-sm">
-              <Field label="Application starts" value={formatDate(opp.applicationStartDate)} />
-              <Field label="Last date to apply" value={formatDate(opp.applicationEndDate)} />
-            </dl>
-            {keyEvents.length > 0 ? (
-              <ul className="mt-4 space-y-2 text-sm">
-                {keyEvents.map((event, i) => (
-                  <li key={i} className="flex flex-wrap justify-between gap-2 border-t border-border pt-2">
-                    <span className="text-muted-foreground">
-                      {event.title || EVENT_TYPE_LABELS[event.eventType] || event.eventType}
-                    </span>
-                    <span className="text-foreground">{eventDateLabel(event)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </Block>
-        </div>
-
-        <aside className="space-y-4">
-          {user ? (
-            <div className="space-y-3 rounded-xl border border-border bg-card p-5">
-              <SaveButton opportunityId={opp.id} initialSaved={saved} />
-              <TrackingControl opportunityId={opp.id} initialStatus={trackingStatus} />
-            </div>
-          ) : (
-            <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
-              <Link
-                href={`/login?next=/opportunities/${opp.slug}`}
-                className="font-medium text-primary hover:underline"
-              >
-                Sign in
-              </Link>{" "}
-              to save this opportunity or track your application.
-            </div>
-          )}
-
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h2 className="text-sm font-semibold text-foreground">Key facts</h2>
-            <dl className="mt-3 space-y-2 text-sm">
-              <Field label="Department" value={opp.organisation?.name ?? null} />
-              <Field label="Category" value={opp.category?.name ?? null} />
-              <Field label="Region" value={region} />
-              <Field
-                label="Vacancies"
-                value={
-                  typeof opp.totalVacancies === "number"
-                    ? opp.totalVacancies.toLocaleString("en-IN")
-                    : null
-                }
-              />
-              <Field label="Published" value={formatDate(opp.publicationDate)} />
-            </dl>
-
-            {applyHref ? (
-              <a
-                href={applyHref}
-                target="_blank"
-                rel="noopener noreferrer nofollow"
-                className="mt-4 block rounded-lg bg-primary px-4 py-2 text-center text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-              >
-                Apply on official site
-              </a>
-            ) : null}
-            {notificationHref ? (
-              <a
-                href={notificationHref}
-                target="_blank"
-                rel="noopener noreferrer nofollow"
-                className="mt-2 block rounded-lg border border-border px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:border-primary/40"
-              >
-                Official notification (PDF)
-              </a>
-            ) : null}
-            {applyHref || notificationHref ? (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Opens the official website in a new tab.
-              </p>
-            ) : null}
-          </div>
-
-          <p className="px-1 text-xs text-muted-foreground">
-            {opp.sourceName ? <>Source: {opp.sourceName}. </> : null}
-            {formatDate(opp.lastVerifiedAt?.slice(0, 10)) ? (
-              <>Last verified {formatDate(opp.lastVerifiedAt?.slice(0, 10))}.</>
-            ) : null}
-          </p>
-        </aside>
-      </div>
-    </article>
+    </>
   );
+}
+
+/** The main column: overview, posts, eligibility, fees, selection, how to apply, dates. */
+async function CachedArticleBody({ slug }: { slug: string }) {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("opportunities", `opportunity:${slug}`);
+
+  const opp = await getOpportunityBySlug(slug);
+  if (!opp) return null;
+
+  // Application window is shown separately, so drop those from the dated list.
+  const keyEvents = opp.events
+    .filter((e) => e.eventType !== "application_start" && e.eventType !== "application_end")
+    .sort(byEventDate);
+
+  return (
+    <div className="space-y-8">
+      <Block title="Overview">
+        <Prose value={opp.description} />
+      </Block>
+
+      {opp.posts.length > 0 ? (
+        <Block title="Posts & vacancies">
+          <p className="mb-3 text-sm text-muted-foreground">
+            {opp.totalVacancies !== null
+              ? `${opp.totalVacancies.toLocaleString("en-IN")} total ${
+                  opp.totalVacancies === 1 ? "vacancy" : "vacancies"
+                } across ${opp.posts.length} ${opp.posts.length === 1 ? "post" : "posts"}.`
+              : `${opp.posts.length} ${opp.posts.length === 1 ? "post" : "posts"}.`}
+          </p>
+          <ul className="space-y-4">
+            {opp.posts.map((p) => (
+              <li key={p.id} className="rounded-lg border border-border bg-card p-4">
+                <h3 className="text-sm font-semibold text-foreground">{p.name}</h3>
+                {p.department ? (
+                  <p className="text-xs text-muted-foreground">{p.department}</p>
+                ) : null}
+                <dl className="mt-3 space-y-2 text-sm">
+                  <Field
+                    label="Vacancies"
+                    value={
+                      typeof p.vacancies === "number" ? p.vacancies.toLocaleString("en-IN") : null
+                    }
+                  />
+                  <Field label="Pay level" value={p.payLevel} />
+                  <Field label="Eligibility" value={p.eligibility} />
+                  <Field label="Age limit" value={p.ageLimit} />
+                </dl>
+              </li>
+            ))}
+          </ul>
+        </Block>
+      ) : null}
+
+      <Block title="Eligibility">
+        <dl className="space-y-3 text-sm">
+          <Field label="Qualification" value={opp.qualificationText} />
+          <Field label="Age" value={opp.ageLimit} />
+          <Field label="Other conditions" value={opp.eligibility} />
+        </dl>
+        {opp.qualifications.length > 0 ? (
+          <ul className="mt-4 flex flex-wrap gap-2">
+            {opp.qualifications.map((q) => (
+              <li
+                key={q.slug}
+                className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground"
+              >
+                {q.name}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Block>
+
+      <Block title="Fees & pay">
+        <dl className="space-y-3 text-sm">
+          <Field label="Application fee" value={opp.applicationFee} />
+          <Field label="Pay / salary" value={opp.salary} />
+        </dl>
+      </Block>
+
+      <Block title="Selection process">
+        <Prose value={opp.selectionProcess} />
+      </Block>
+
+      <Block title="How to apply">
+        <dl className="space-y-3 text-sm">
+          <Field label="Instructions" value={opp.applicationInstructions} />
+          <Field label="Required documents" value={opp.requiredDocuments} />
+        </dl>
+      </Block>
+
+      <Block title="Important dates">
+        <dl className="space-y-3 text-sm">
+          <Field label="Application starts" value={formatDate(opp.applicationStartDate)} />
+          <Field label="Last date to apply" value={formatDate(opp.applicationEndDate)} />
+        </dl>
+        {keyEvents.length > 0 ? (
+          <ul className="mt-4 space-y-2 text-sm">
+            {keyEvents.map((event, i) => (
+              <li key={i} className="flex flex-wrap justify-between gap-2 border-t border-border pt-2">
+                <span className="text-muted-foreground">
+                  {event.title || EVENT_TYPE_LABELS[event.eventType] || event.eventType}
+                </span>
+                <span className="text-foreground">{eventDateLabel(event)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Block>
+    </div>
+  );
+}
+
+/** Sidebar key facts, official links and the source / last-verified note. */
+async function CachedArticleFacts({ slug }: { slug: string }) {
+  "use cache";
+  cacheLife("hours");
+  cacheTag("opportunities", `opportunity:${slug}`);
+
+  const opp = await getOpportunityBySlug(slug);
+  if (!opp) return null;
+
+  const applyHref = usableUrl(opp.applicationUrl);
+  const notificationHref = usableUrl(opp.notificationUrl);
+  const verified = formatDate(opp.lastVerifiedAt?.slice(0, 10));
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold text-foreground">Key facts</h2>
+        <dl className="mt-3 space-y-2 text-sm">
+          <Field label="Department" value={opp.organisation?.name ?? null} />
+          <Field label="Category" value={opp.category?.name ?? null} />
+          <Field label="Region" value={regionLabel(opp)} />
+          <Field
+            label="Vacancies"
+            value={
+              typeof opp.totalVacancies === "number"
+                ? opp.totalVacancies.toLocaleString("en-IN")
+                : null
+            }
+          />
+          <Field label="Published" value={formatDate(opp.publicationDate)} />
+        </dl>
+
+        {applyHref ? (
+          <a
+            href={applyHref}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="mt-4 block rounded-lg bg-primary px-4 py-2 text-center text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Apply on official site
+          </a>
+        ) : null}
+        {notificationHref ? (
+          <a
+            href={notificationHref}
+            target="_blank"
+            rel="noopener noreferrer nofollow"
+            className="mt-2 block rounded-lg border border-border px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:border-primary/40"
+          >
+            Official notification (PDF)
+          </a>
+        ) : null}
+        {applyHref || notificationHref ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Opens the official website in a new tab.
+          </p>
+        ) : null}
+      </div>
+
+      <p className="px-1 text-xs text-muted-foreground">
+        {opp.sourceName ? <>Source: {opp.sourceName}. </> : null}
+        {verified ? <>Last verified {verified}.</> : null}
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Per-user (dynamic) content — reads the session; streamed, never cached.
+// ---------------------------------------------------------------------------
+
+/** Save/Track for a signed-in user, or a sign-in prompt for anonymous visitors. */
+async function UserActions({ slug }: { slug: string }) {
+  await connection();
+  const user = await getSessionUser();
+  const opp = await getOpportunityBySlug(slug); // shared cache hit — public data only
+  if (!opp) return null;
+
+  if (!user) {
+    return (
+      <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
+        <Link
+          href={`/login?next=/opportunities/${opp.slug}`}
+          className="font-medium text-primary hover:underline"
+        >
+          Sign in
+        </Link>{" "}
+        to save this opportunity or track your application.
+      </div>
+    );
+  }
+
+  // Per-user reads go through the cookie client (RLS: owner rows only) and are
+  // never cached.
+  const [saved, trackingStatus] = await Promise.all([
+    isSaved(opp.id),
+    getTrackingStatus(opp.id),
+  ]);
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-card p-5">
+      <SaveButton opportunityId={opp.id} initialSaved={saved} />
+      <TrackingControl opportunityId={opp.id} initialStatus={trackingStatus} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Presentational helpers
+// ---------------------------------------------------------------------------
+
+function regionLabel(opp: OpportunityDetail): string {
+  return opp.state ? opp.state.name : "All India / Central";
 }
 
 function Badge({ children }: { children: React.ReactNode }) {
