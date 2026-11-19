@@ -4,7 +4,7 @@ import "./globals.css";
 
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { env } from "@/lib/env";
+import { env, isNoIndexBuild } from "@/lib/env";
 import { site } from "@/lib/site";
 
 const geistSans = Geist({
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   },
   description: site.description,
   applicationName: site.name,
-  robots: { index: true, follow: true },
+  robots: isNoIndexBuild ? { index: false, follow: false } : { index: true, follow: true },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -1,12 +1,18 @@
 import type { MetadataRoute } from "next";
 
-import { env } from "@/lib/env";
+import { env, isNoIndexBuild } from "@/lib/env";
 
 /**
- * robots.txt — allow crawling of the public site, but keep the admin area, API,
- * and per-user account routes out of the index (no SEO value, and not for bots).
+ * robots.txt — production: allow crawling of the public site, but keep the admin
+ * area, API, and per-user account routes out of the index. Preview builds
+ * (NEXT_PUBLIC_SITE_NOINDEX=1) disallow everything, since they may point at the
+ * dev database and its demo rows.
  */
 export default function robots(): MetadataRoute.Robots {
+  if (isNoIndexBuild) {
+    return { rules: { userAgent: "*", disallow: "/" } };
+  }
+
   const base = env.siteUrl.replace(/\/$/, "");
   return {
     rules: {
