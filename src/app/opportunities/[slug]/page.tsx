@@ -285,6 +285,10 @@ async function CachedArticleFacts({ slug }: { slug: string }) {
             }
           />
           <Field label="Published" value={formatDate(opp.publicationDate)} />
+          {/* A missing official link is stated explicitly, like any other gap,
+              instead of the button silently disappearing. */}
+          {applyHref ? null : <Field label="Apply online" value={null} />}
+          {notificationHref ? null : <Field label="Official notification" value={null} />}
         </dl>
 
         {applyHref ? (
@@ -304,7 +308,7 @@ async function CachedArticleFacts({ slug }: { slug: string }) {
             rel="noopener noreferrer nofollow"
             className="mt-2 block rounded-lg border border-border px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:border-primary/40"
           >
-            Official notification (PDF)
+            Official notification
           </a>
         ) : null}
         {applyHref || notificationHref ? (
