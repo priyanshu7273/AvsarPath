@@ -382,7 +382,7 @@ type RawDetailRow = {
 /**
  * Fetch a single opportunity by its English slug (or null if not public).
  * Cached per slug and tagged so `generateMetadata` and the page render share one
- * DB read, and an admin publish/edit can invalidate it via `revalidateTag`.
+ * DB read, and an admin publish/edit can invalidate it via `updateTag`.
  */
 export async function getOpportunityBySlug(
   slug: string,

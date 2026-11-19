@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { requireAdmin } from "@/lib/auth";
@@ -21,11 +21,14 @@ export type FormState = { error?: string };
 const PUBLISHABLE = ["verified", "updated"] as const;
 
 // Re-validate the public surfaces an opportunity change can affect. The cached
-// public reads (homepage, listing, detail) are all tagged "opportunities", so
-// invalidating that tag refreshes them with stale-while-revalidate semantics;
-// the path revalidations cover any non-cached segments.
+// public reads (homepage, listing, detail) are all tagged "opportunities".
+// updateTag (Server Actions only) EXPIRES the tag immediately, so the next
+// request on every server instance waits for fresh data instead of serving the
+// stale copy once per instance (which revalidateTag(..., "max") does — measured
+// on the Netlify preview as up to ~65 s of stale detail pages after a publish).
+// The path revalidations cover any non-cached segments.
 function revalidatePublic() {
-  revalidateTag("opportunities", "max");
+  updateTag("opportunities");
   revalidatePath("/");
   revalidatePath("/opportunities");
   revalidatePath("/eligibility");
