@@ -15,6 +15,19 @@ export const site = {
     "AvsarPath is an independent information platform and is not affiliated with UPSC, SSC, BPSC, Railway Recruitment Boards or any government authority.",
 };
 
+/**
+ * Public contact details used by the Contact, Privacy and Terms pages. Must be
+ * filled in before go-live; while empty, the pages show a visible
+ * "to be added" marker instead of a broken mailto link.
+ */
+export const contact: { email: string; grievanceOfficer: string } = {
+  email: "avsarpath.help@gmail.com",
+  grievanceOfficer: "Priyanshu, Operator, AvsarPath",
+};
+
+/** "Last updated" date shown on the Privacy Policy and Terms. */
+export const legalLastUpdated = "19 November 2026";
+
 export const primaryNav: { label: string; href: string }[] = [
   { label: "Opportunities", href: "/opportunities" },
   { label: "Exam Calendar", href: "/calendar" },

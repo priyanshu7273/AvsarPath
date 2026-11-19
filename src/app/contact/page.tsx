@@ -1,22 +1,57 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
-export const metadata: Metadata = { title: "Contact Us" };
+import { ContactEmail, GrievanceOfficer, LegalPage, List, Section } from "@/components/legal";
+import { site } from "@/lib/site";
+
+export const metadata: Metadata = {
+  title: "Contact Us",
+  description: `How to contact ${site.name} about a listing, your data or a complaint.`,
+};
+
+const linkClass = "font-medium text-primary hover:underline";
 
 export default function Page() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-bold tracking-tight text-foreground">
-        Contact Us
-      </h1>
-      <div className="mt-6 space-y-4 text-muted-foreground">
+    <LegalPage title="Contact Us">
+      <p>
+        {site.name} is run independently. The best way to reach us is by email:{" "}
+        <ContactEmail />. There is no contact form; we don&apos;t store messages anywhere
+        other than our email inbox.
+      </p>
+
+      <Section title="Write to us about">
+        <List>
+          <li>
+            A mistake or out-of-date detail in a listing. Please include the link to our
+            page and to the official notification.
+          </li>
+          <li>
+            Your personal data: questions, a copy of your data or a correction. (You can
+            delete your account yourself from your{" "}
+            <Link href="/account" className={linkClass}>
+              Account
+            </Link>{" "}
+            page.)
+          </li>
+          <li>A complaint about the site.</li>
+        </List>
+      </Section>
+
+      <Section title="What we can't help with">
         <p>
-          A contact form and a support email address will be available here. The
-          form and email configuration are set up in a later phase.
+          Applications, application status, fee payments, admit cards and results are
+          handled only by the official recruiting or examining body. Please contact them
+          through their official website. {site.name} will never ask you for money,
+          passwords or OTPs.
         </p>
-        <p className="text-sm italic">
-          This page is a draft and will be expanded before launch.
+      </Section>
+
+      <Section title="Grievance contact">
+        <p>
+          <GrievanceOfficer />, reachable at <ContactEmail />.
         </p>
-      </div>
-    </div>
+      </Section>
+    </LegalPage>
   );
 }
