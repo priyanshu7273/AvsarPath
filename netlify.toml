@@ -1,0 +1,25 @@
+# Netlify config for AvsarPath. Netlify detects Next.js and applies its Next.js
+# adapter (@netlify/plugin-nextjs) automatically; builds run on Netlify's Linux
+# build image from the GitHub repo.
+#
+# The production branch is chosen in the Netlify UI (planned: `release`, so that
+# pushes to `main` don't trigger a production deploy, which uses credits).
+#
+# Server secrets (SUPABASE_SERVICE_ROLE_KEY, INGEST_SECRET) are NOT in this file:
+# they are Netlify environment variables marked "secret" and set for the
+# Production context only. Public values (NEXT_PUBLIC_*) are set in the UI too.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Non-production deploys are kept out of search engines (disallow-all robots.txt,
+# noindex meta, X-Robots-Tag — see src/lib/env.ts). Production leaves
+# NEXT_PUBLIC_SITE_NOINDEX unset, so it is indexable.
+[context.deploy-preview.environment]
+  NEXT_PUBLIC_SITE_NOINDEX = "1"
+
+[context.branch-deploy.environment]
+  NEXT_PUBLIC_SITE_NOINDEX = "1"
