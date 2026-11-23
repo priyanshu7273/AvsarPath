@@ -17,6 +17,7 @@ export async function AccountMenu() {
     return (
       <Link
         href="/login"
+        prefetch={false}
         className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground transition-colors hover:border-primary/40"
       >
         Sign in
@@ -41,17 +42,18 @@ export async function AccountMenu() {
         <span className="truncate px-3 py-1 text-xs text-muted-foreground" title={user.email}>
           {user.email}
         </span>
-        <Link href="/dashboard" className={itemClass}>
+        {/* No prefetch: each background prefetch is a billed server invocation. */}
+        <Link href="/dashboard" prefetch={false} className={itemClass}>
           Dashboard
         </Link>
-        <Link href="/saved" className={itemClass}>
+        <Link href="/saved" prefetch={false} className={itemClass}>
           Saved
         </Link>
-        <Link href="/account" className={itemClass}>
+        <Link href="/account" prefetch={false} className={itemClass}>
           Account
         </Link>
         {isAdmin ? (
-          <Link href="/admin" className={`${itemClass} text-primary`}>
+          <Link href="/admin" prefetch={false} className={`${itemClass} text-primary`}>
             Admin
           </Link>
         ) : null}

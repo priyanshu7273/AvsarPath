@@ -27,8 +27,10 @@ export async function SiteFooter() {
             <ul className="mt-3 space-y-2">
               {primaryNav.map((item) => (
                 <li key={item.href}>
+                  {/* No prefetch: each background prefetch is a billed server invocation. */}
                   <Link
                     href={item.href}
+                    prefetch={false}
                     className="text-sm text-muted-foreground hover:text-foreground"
                   >
                     {item.label}
@@ -45,6 +47,7 @@ export async function SiteFooter() {
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    prefetch={false}
                     className="text-sm text-muted-foreground hover:text-foreground"
                   >
                     {item.label}

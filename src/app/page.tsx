@@ -53,6 +53,9 @@ export default function Home() {
                 <Link
                   key={q.slug}
                   href={`/eligibility?qualification=${q.slug}`}
+                  // No prefetch on homepage chips: each background prefetch is a
+                  // billed server invocation on Netlify.
+                  prefetch={false}
                   className="rounded-full border border-border bg-background px-3 py-1.5 text-sm text-foreground transition-colors hover:border-primary hover:text-primary"
                 >
                   {q.label}
@@ -74,6 +77,7 @@ export default function Home() {
               <Link
                 key={c.slug}
                 href={`/opportunities?category=${c.slug}`}
+                prefetch={false}
                 className="rounded-lg border border-border bg-card p-4 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
               >
                 {c.label}
@@ -92,6 +96,7 @@ export default function Home() {
               <Link
                 key={r.slug}
                 href={`/opportunities?state=${r.slug}`}
+                prefetch={false}
                 className="rounded-lg border border-border bg-card px-5 py-3 text-sm font-medium text-foreground transition-colors hover:border-primary hover:text-primary"
               >
                 {r.label}

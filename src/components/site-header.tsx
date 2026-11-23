@@ -8,7 +8,14 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-        <Link href="/" className="flex items-center gap-2" aria-label={`${site.name} home`}>
+        {/* prefetch={false} on all chrome links: on Netlify each background route
+            prefetch is a billed server invocation, ~20 per page view measured. */}
+        <Link
+          href="/"
+          prefetch={false}
+          className="flex items-center gap-2"
+          aria-label={`${site.name} home`}
+        >
           <span className="text-xl font-bold tracking-tight">
             <span className="text-foreground">Avsar</span>
             <span className="text-primary">Path</span>
@@ -22,6 +29,7 @@ export function SiteHeader() {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 {item.label}
@@ -63,6 +71,7 @@ export function SiteHeader() {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className="rounded-md px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 {item.label}

@@ -31,6 +31,8 @@ export function Section({
         {moreHref ? (
           <Link
             href={moreHref}
+            // No prefetch: each background prefetch is a billed server invocation.
+            prefetch={false}
             className="shrink-0 text-sm font-medium text-primary hover:underline"
           >
             {moreLabel}

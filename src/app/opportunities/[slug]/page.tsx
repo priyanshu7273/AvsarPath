@@ -110,7 +110,9 @@ async function CachedArticleHeader({ slug }: { slug: string }) {
     <>
       <JsonLd data={buildStructuredData(opp, env.siteUrl)} />
       <nav className="text-sm text-muted-foreground" aria-label="Breadcrumb">
-        <Link href="/opportunities" className="hover:text-foreground">
+        {/* No prefetch: detail pages take the result-day traffic, and each
+            background prefetch is a billed server invocation on Netlify. */}
+        <Link href="/opportunities" prefetch={false} className="hover:text-foreground">
           Opportunities
         </Link>
         <span aria-hidden> / </span>
@@ -342,6 +344,7 @@ async function UserActions({ slug }: { slug: string }) {
       <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
         <Link
           href={`/login?next=/opportunities/${opp.slug}`}
+          prefetch={false}
           className="font-medium text-primary hover:underline"
         >
           Sign in
