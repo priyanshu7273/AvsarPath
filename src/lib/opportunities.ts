@@ -146,7 +146,13 @@ export const emptyFilterOptions: FilterOptions = {
   organisations: [],
 };
 
-export type OpportunitySort = "newest" | "deadline";
+/** "relevance" applies only while there is a search term (and is then the default). */
+export type OpportunitySort = "relevance" | "newest" | "deadline";
+
+/** The sort used when the URL doesn't name one: best match for a search, else newest. */
+export function defaultSort(q: string | undefined): OpportunitySort {
+  return q ? "relevance" : "newest";
+}
 
 export type OpportunityFilters = {
   q?: string;
@@ -258,16 +264,56 @@ function firstValue(value: string | string[] | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function parseSort(raw: string | undefined, q: string | undefined): OpportunitySort {
+  if (raw === "deadline" || raw === "newest") return raw;
+  if (raw === "relevance" && q) return raw;
+  return defaultSort(q);
+}
+
+/** Lowercased words, split like Postgres' 'simple' search config (on non-letters/digits). */
+function searchWords(text: string): string[] {
+  return text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+/**
+ * How well a listing matches a search, for ranking results (higher is better).
+ * The exact phrase in the title beats everything else; the exact phrase in the
+ * body (description + qualification) beats any non-phrase match; below that,
+ * each search word found in the title counts double one found only in the body.
+ */
+export function searchRelevance(query: string, title: string, body: string): number {
+  const queryWords = searchWords(query);
+  if (queryWords.length === 0) return 0;
+  const terms = [...new Set(queryWords)];
+  const phrase = ` ${queryWords.join(" ")} `;
+
+  const titleWords = searchWords(title);
+  const bodyWords = searchWords(body);
+  const coverage = (words: string[]) => {
+    const set = new Set(words);
+    return terms.filter((t) => set.has(t)).length / terms.length;
+  };
+
+  return (
+    (` ${titleWords.join(" ")} `.includes(phrase) ? 8 : 0) +
+    (` ${bodyWords.join(" ")} `.includes(phrase) ? 4 : 0) +
+    2 * coverage(titleWords) +
+    coverage(bodyWords)
+  );
+}
+
 /** Turn raw `searchParams` into a validated, typed filter object. */
 export function parseOpportunityFilters(
   searchParams: Record<string, string | string[] | undefined>,
 ): OpportunityFilters {
+  const q = firstValue(searchParams.q);
   const type = firstValue(searchParams.type);
   const status = firstValue(searchParams.status);
+  const sort = firstValue(searchParams.sort);
   const page = Number.parseInt(firstValue(searchParams.page) ?? "1", 10);
 
   return {
-    q: firstValue(searchParams.q),
+    q,
     qualification: firstValue(searchParams.qualification),
     category: firstValue(searchParams.category),
     state: firstValue(searchParams.state),
@@ -278,7 +324,7 @@ export function parseOpportunityFilters(
     status: (OPPORTUNITY_STATUSES as readonly string[]).includes(status ?? "")
       ? (status as OpportunityStatus)
       : undefined,
-    sort: firstValue(searchParams.sort) === "deadline" ? "deadline" : "newest",
+    sort: parseSort(sort, q),
     page: Number.isFinite(page) && page > 0 ? page : 1,
   };
 }
@@ -293,7 +339,10 @@ export function opportunitiesHref(filters: Partial<OpportunityFilters>): string 
   if (filters.department) params.set("department", filters.department);
   if (filters.type) params.set("type", filters.type);
   if (filters.status) params.set("status", filters.status);
-  if (filters.sort && filters.sort !== "newest") params.set("sort", filters.sort);
+  // Only a non-default sort goes in the URL; "relevance" means nothing without q.
+  if (filters.sort && filters.sort !== defaultSort(filters.q) && (filters.sort !== "relevance" || filters.q)) {
+    params.set("sort", filters.sort);
+  }
   if (filters.page && filters.page > 1) params.set("page", String(filters.page));
   const query = params.toString();
   return query ? `/opportunities?${query}` : "/opportunities";

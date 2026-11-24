@@ -9,6 +9,7 @@ import {
   CENTRAL_STATE,
   PAGE_SIZE,
   emptyFilterOptions,
+  searchRelevance,
   sumPostVacancies,
   type FilterOptions,
   type LookupOption,
@@ -202,14 +203,26 @@ export async function getOpportunities(
 
   // Id-based constraints (search + qualification). Each is AND-ed in.
   const idConstraints: string[][] = [];
+  // Search relevance per matching opportunity id (only when searching).
+  const relevance = new Map<string, number>();
 
   if (filters.q) {
     const { data } = await sb
       .from("opportunity_translations")
-      .select("opportunity_id")
+      .select("opportunity_id, title, description, qualification")
       .eq("locale", "en")
       .textSearch("search_tsv", filters.q, { type: "plain", config: "simple" });
-    idConstraints.push(((data ?? []) as { opportunity_id: string }[]).map((r) => r.opportunity_id));
+    const matches = (data ?? []) as {
+      opportunity_id: string;
+      title: string;
+      description: string | null;
+      qualification: string | null;
+    }[];
+    for (const m of matches) {
+      const body = `${m.description ?? ""} ${m.qualification ?? ""}`;
+      relevance.set(m.opportunity_id, searchRelevance(filters.q, m.title, body));
+    }
+    idConstraints.push(matches.map((m) => m.opportunity_id));
   }
 
   if (filters.qualification) {
@@ -222,18 +235,54 @@ export async function getOpportunities(
 
   if (idConstraints.some((ids) => ids.length === 0)) return EMPTY_RESULT(true);
 
-  let query = sb
-    .from("opportunities")
-    .select(LIST_SELECT, { count: "exact" })
-    .eq("tr.locale", "en");
+  // The listing query with every filter applied; `columns` varies by caller.
+  const filtered = (columns: string, options?: { count: "exact" }) => {
+    let q = sb.from("opportunities").select(columns, options).eq("tr.locale", "en");
+    if (categoryId) q = q.eq("category_id", categoryId);
+    if (organisationId) q = q.eq("organisation_id", organisationId);
+    if (filters.state === CENTRAL_STATE) q = q.is("state_id", null);
+    else if (stateId) q = q.eq("state_id", stateId);
+    if (filters.type) q = q.eq("opportunity_type", filters.type);
+    if (filters.status) q = q.eq("opportunity_status", filters.status);
+    for (const ids of idConstraints) q = q.in("id", ids);
+    return q;
+  };
 
-  if (categoryId) query = query.eq("category_id", categoryId);
-  if (organisationId) query = query.eq("organisation_id", organisationId);
-  if (filters.state === CENTRAL_STATE) query = query.is("state_id", null);
-  else if (stateId) query = query.eq("state_id", stateId);
-  if (filters.type) query = query.eq("opportunity_type", filters.type);
-  if (filters.status) query = query.eq("opportunity_status", filters.status);
-  for (const ids of idConstraints) query = query.in("id", ids);
+  const from = (filters.page - 1) * PAGE_SIZE;
+
+  // Best match first: Postgres can't order by our relevance score, so fetch
+  // the (small) set of matching ids, rank them here, then load just this page.
+  if (filters.sort === "relevance" && filters.q) {
+    const { data, error } = await filtered(
+      "id, published_at, tr:opportunity_translations!inner ( locale )",
+    );
+    if (error) throwQueryError("Failed to rank search results", error);
+
+    const ranked = ((data ?? []) as unknown as { id: string; published_at: string | null }[])
+      .sort(
+        (a, b) =>
+          (relevance.get(b.id) ?? 0) - (relevance.get(a.id) ?? 0) ||
+          (b.published_at ?? "").localeCompare(a.published_at ?? ""),
+      )
+      .map((r) => r.id);
+    const pageIds = ranked.slice(from, from + PAGE_SIZE);
+    if (pageIds.length === 0) return { rows: [], total: ranked.length, configured: true };
+
+    const { data: pageData, error: pageError } = await sb
+      .from("opportunities")
+      .select(LIST_SELECT)
+      .eq("tr.locale", "en")
+      .in("id", pageIds);
+    if (pageError) throwQueryError("Failed to load opportunities", pageError);
+
+    const byId = new Map(
+      ((pageData ?? []) as unknown as RawListRow[]).map((row) => [row.id, mapSummary(row)]),
+    );
+    const rows = pageIds.flatMap((id) => byId.get(id) ?? []);
+    return { rows, total: ranked.length, configured: true };
+  }
+
+  let query = filtered(LIST_SELECT, { count: "exact" });
 
   if (filters.sort === "deadline") {
     query = query.order("application_end_date", { ascending: true, nullsFirst: false });
@@ -241,7 +290,6 @@ export async function getOpportunities(
     query = query.order("published_at", { ascending: false, nullsFirst: false });
   }
 
-  const from = (filters.page - 1) * PAGE_SIZE;
   query = query.range(from, from + PAGE_SIZE - 1);
 
   const { data, count, error } = await query;

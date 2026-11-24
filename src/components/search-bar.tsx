@@ -1,11 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 
 export function SearchBar() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+
+  // Next keeps visited pages alive; clear the box when this page is left so a
+  // return visit starts empty instead of showing an old search.
+  useLayoutEffect(() => () => setQuery(""), []);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

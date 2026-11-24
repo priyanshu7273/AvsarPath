@@ -8,6 +8,7 @@ import { OpportunityFilters } from "@/components/opportunity-filters";
 import { Pagination } from "@/components/pagination";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
+  opportunitiesHref,
   parseOpportunityFilters,
   type OpportunityFilters as OpportunityFilterSet,
 } from "@/lib/opportunities";
@@ -63,7 +64,14 @@ async function ResultsList({ filters }: { filters: OpportunityFilterSet }) {
 
   return (
     <div className="space-y-6">
-      <OpportunityFilters options={options} current={filters} total={total} />
+      {/* Keyed by the URL's filters: a new URL always starts the form from it,
+          never from state kept over from an earlier visit. */}
+      <OpportunityFilters
+        key={opportunitiesHref(filters)}
+        options={options}
+        current={filters}
+        total={total}
+      />
 
       {rows.length === 0 ? (
         <EmptyState message="No opportunities match these filters yet. Try widening or clearing them — new verified listings are added regularly." />

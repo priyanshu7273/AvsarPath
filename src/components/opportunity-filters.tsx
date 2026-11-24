@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useLayoutEffect, useState } from "react";
 
 import {
   CENTRAL_STATE,
@@ -13,6 +13,7 @@ import {
   opportunitiesHref,
   type FilterOptions,
   type OpportunityFilters,
+  type OpportunitySort,
 } from "@/lib/opportunities";
 
 type Props = {
@@ -25,14 +26,32 @@ const selectClass =
   "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground outline-none focus-visible:border-primary";
 const labelClass = "mb-1 block text-xs font-medium text-muted-foreground";
 
+/**
+ * Search box + filters for /opportunities. Everything shown here comes from the
+ * URL (`current`): the parent keys this component by the URL's filters, so a
+ * different URL always starts from that URL's values. The only local state is
+ * the search box's unsubmitted text, which is dropped when the page is left
+ * (Next keeps visited pages alive and would otherwise show it again).
+ */
 export function OpportunityFilters({ options, current, total }: Props) {
   const router = useRouter();
-  const [q, setQ] = useState(current.q ?? "");
+  const urlQ = current.q ?? "";
+  const [q, setQ] = useState(urlQ);
+
+  // Runs when Next hides this page on navigation: back to the URL's search.
+  useLayoutEffect(() => () => setQ(urlQ), [urlQ]);
 
   // Navigate with the current filters plus an override. Any change resets to
-  // page 1. Empty strings become `undefined` so they drop out of the URL.
+  // page 1 and also applies whatever is typed in the search box. Empty strings
+  // become `undefined` so they drop out of the URL.
   function go(next: Partial<OpportunityFilters>) {
-    router.push(opportunitiesHref({ ...current, ...next, page: 1 }));
+    const nextQ = "q" in next ? next.q : q.trim() || undefined;
+    // A new search term gets the default order (best match) unless the user
+    // picked "closing soonest" or is choosing a sort right now.
+    const sort =
+      next.sort ??
+      (nextQ !== current.q && current.sort !== "deadline" ? undefined : current.sort);
+    router.push(opportunitiesHref({ ...current, ...next, q: nextQ, sort, page: 1 }));
   }
 
   function onSearch(event: React.FormEvent) {
@@ -212,15 +231,9 @@ export function OpportunityFilters({ options, current, total }: Props) {
             id="f-sort"
             className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground outline-none focus-visible:border-primary"
             value={current.sort}
-            onChange={(e) =>
-              router.push(
-                opportunitiesHref({
-                  ...current,
-                  sort: e.target.value === "deadline" ? "deadline" : "newest",
-                }),
-              )
-            }
+            onChange={(e) => go({ sort: e.target.value as OpportunitySort })}
           >
+            {current.q ? <option value="relevance">Best match</option> : null}
             <option value="newest">Newest first</option>
             <option value="deadline">Closing soonest</option>
           </select>
