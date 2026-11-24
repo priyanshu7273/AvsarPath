@@ -362,6 +362,34 @@ export function eligibilityHref(filters: {
   return query ? `/eligibility?${query}` : "/eligibility";
 }
 
+/**
+ * Whether people can still apply. "cancelled" wins; otherwise a listing is
+ * closed when its status says so (closed/expired) OR its last date to apply
+ * (inclusive, Indian date) is before `today`, so this works even before a job
+ * updates the status. `today` is a yyyy-mm-dd date, see `todayInIndia`.
+ */
+export type ApplicationState = "open" | "closed" | "cancelled";
+
+export function applicationState(
+  opp: { status: OpportunityStatus; applicationEndDate: string | null },
+  today: string,
+): ApplicationState {
+  if (opp.status === "cancelled") return "cancelled";
+  if (opp.status === "closed" || opp.status === "expired") return "closed";
+  if (opp.applicationEndDate && opp.applicationEndDate < today) return "closed";
+  return "open";
+}
+
+/** Today's date in India (Asia/Kolkata) as yyyy-mm-dd. */
+export function todayInIndia(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 /** True when any narrowing filter (not counting sort/page) is active. */
 export function hasActiveFilters(filters: OpportunityFilters): boolean {
   return Boolean(

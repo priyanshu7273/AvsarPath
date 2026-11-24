@@ -9,7 +9,9 @@ import {
   EVENT_TYPE_LABELS,
   STATUS_LABELS,
   TYPE_LABELS,
+  applicationState,
   formatDate,
+  todayInIndia,
   type ExamEvent,
   type OpportunityDetail,
 } from "@/lib/opportunities";
@@ -266,7 +268,11 @@ async function CachedArticleFacts({ slug }: { slug: string }) {
   const opp = await getOpportunityBySlug(slug);
   if (!opp) return null;
 
-  const applyHref = usableUrl(opp.applicationUrl);
+  // Read inside "use cache", so "today" is as fresh as this cached entry
+  // (cacheLife "hours"): a listing can show as open for up to about an hour
+  // after its last date ends.
+  const state = applicationState(opp, todayInIndia());
+  const applyHref = state === "open" ? usableUrl(opp.applicationUrl) : null;
   const notificationHref = usableUrl(opp.notificationUrl);
   const verified = formatDate(opp.lastVerifiedAt?.slice(0, 10));
 
@@ -288,11 +294,17 @@ async function CachedArticleFacts({ slug }: { slug: string }) {
           />
           <Field label="Published" value={formatDate(opp.publicationDate)} />
           {/* A missing official link is stated explicitly, like any other gap,
-              instead of the button silently disappearing. */}
-          {applyHref ? null : <Field label="Apply online" value={null} />}
+              instead of the button silently disappearing. Only while
+              applications are open: once closed, the notice below says so. */}
+          {state === "open" && !applyHref ? <Field label="Apply online" value={null} /> : null}
           {notificationHref ? null : <Field label="Official notification" value={null} />}
         </dl>
 
+        {state !== "open" ? (
+          <p className="mt-4 rounded-lg border border-border bg-muted px-4 py-2 text-center text-sm font-semibold text-muted-foreground">
+            {state === "cancelled" ? "Recruitment cancelled" : "Applications closed"}
+          </p>
+        ) : null}
         {applyHref ? (
           <a
             href={applyHref}
