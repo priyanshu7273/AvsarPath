@@ -1,0 +1,55 @@
+name: Daily ingest
+
+# Calls the production ingest endpoint once a day. Ingestion only stages new
+# feed items in the admin review queue; it never publishes anything.
+on:
+  schedule:
+    # 01:30 UTC = 07:00 IST. GitHub can start scheduled runs late when busy.
+    - cron: "30 1 * * *"
+  workflow_dispatch:
+
+# The job only makes an outbound HTTP call; it needs no repository access.
+permissions: {}
+
+concurrency:
+  group: daily-ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: POST /api/ingest
+        env:
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
+          INGEST_URL: https://avsarpath.netlify.app/api/ingest
+        run: |
+          set -euo pipefail
+          if [ -z "${INGEST_SECRET}" ]; then
+            echo "::error::Repository secret INGEST_SECRET is not set (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+
+          status=$(curl -sS -o response.json -w '%{http_code}' \
+            --retry 2 --retry-delay 15 --max-time 60 \
+            -X POST \
+            -H "x-ingest-secret: ${INGEST_SECRET}" \
+            "${INGEST_URL}")
+          echo "HTTP status: ${status}"
+
+          # This repository is public, so its Actions logs are public too: print
+          # only the totals, never the per-source details in the response body.
+          if [ "${status}" = "200" ]; then
+            totals=$(jq -c '{status, sources, totals}' response.json)
+            echo "Result: ${totals}"
+            echo "Ingest OK: \`${totals}\`" >> "${GITHUB_STEP_SUMMARY}"
+          else
+            echo "Error: $(jq -r '.error // "unexpected response"' response.json 2>/dev/null || echo "unreadable response")"
+          fi
+          rm -f response.json
+
+          if [ "${status}" != "200" ]; then
+            echo "::error::Ingest returned HTTP ${status}"
+            exit 1
+          fi
