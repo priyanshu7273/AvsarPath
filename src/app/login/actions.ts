@@ -21,7 +21,12 @@ export async function signInWithProvider(provider: Provider, next?: string) {
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
-    options: { redirectTo: callback.toString() },
+    options: {
+      redirectTo: callback.toString(),
+      // Always show Google's account chooser. Without it, someone signed in to a
+      // single Google account is signed straight in and can't pick another one.
+      ...(provider === "google" ? { queryParams: { prompt: "select_account" } } : {}),
+    },
   });
 
   if (error || !data?.url) {

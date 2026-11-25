@@ -5,7 +5,7 @@ import "./globals.css";
 import { CleanAuthParams } from "@/components/clean-auth-params";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { env, isNoIndexBuild } from "@/lib/env";
+import { env, googleSiteVerification, isNoIndexBuild } from "@/lib/env";
 import { site } from "@/lib/site";
 
 const geistSans = Geist({
@@ -27,6 +27,8 @@ export const metadata: Metadata = {
   description: site.description,
   applicationName: site.name,
   robots: isNoIndexBuild ? { index: false, follow: false } : { index: true, follow: true },
+  // Search Console ownership check; only rendered when the token is configured.
+  ...(googleSiteVerification ? { verification: { google: googleSiteVerification } } : {}),
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

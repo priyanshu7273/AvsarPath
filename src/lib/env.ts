@@ -24,3 +24,20 @@ export const isSupabaseConfigured =
  * Production builds leave it unset.
  */
 export const isNoIndexBuild = process.env.NEXT_PUBLIC_SITE_NOINDEX === "1";
+
+/**
+ * Google Search Console "HTML tag" verification token, rendered as
+ * <meta name="google-site-verification">. Public by design (Google reads it from
+ * the page), and NEXT_PUBLIC so it is inlined at build time like the noindex
+ * switch. Accepts the bare token or the whole pasted <meta> tag. Unset = no tag.
+ */
+export const googleSiteVerification = parseVerificationToken(
+  process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION,
+);
+
+function parseVerificationToken(raw: string | undefined): string | undefined {
+  const value = raw?.trim();
+  if (!value) return undefined;
+  const fromTag = value.match(/content=["']([^"']+)["']/)?.[1];
+  return (fromTag ?? value).trim() || undefined;
+}
