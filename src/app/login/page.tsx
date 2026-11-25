@@ -35,11 +35,12 @@ export default function Page({ searchParams }: PageProps<"/login">) {
 
       <p className="mt-6 text-xs text-muted-foreground">
         By continuing you agree to our{" "}
-        <Link href="/terms" className="text-primary hover:underline">
+        {/* No prefetch: each background prefetch is a billed server invocation. */}
+        <Link href="/terms" prefetch={false} className="text-primary hover:underline">
           Terms
         </Link>{" "}
         and{" "}
-        <Link href="/privacy" className="text-primary hover:underline">
+        <Link href="/privacy" prefetch={false} className="text-primary hover:underline">
           Privacy Policy
         </Link>
         .
