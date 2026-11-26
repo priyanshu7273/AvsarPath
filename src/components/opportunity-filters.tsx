@@ -7,19 +7,24 @@ import {
   CENTRAL_STATE,
   OPPORTUNITY_STATUSES,
   OPPORTUNITY_TYPES,
+  STATUS_FILTER_LABELS,
   STATUS_LABELS,
   TYPE_LABELS,
+  defaultStatus,
   hasActiveFilters,
   opportunitiesHref,
   type FilterOptions,
   type OpportunityFilters,
   type OpportunitySort,
+  type StatusFilter,
 } from "@/lib/opportunities";
 
 type Props = {
   options: FilterOptions;
   current: OpportunityFilters;
   total: number;
+  /** Closed/expired/cancelled matches hidden by the "open & upcoming" filter. */
+  hiddenClosed: number;
 };
 
 const selectClass =
@@ -33,7 +38,7 @@ const labelClass = "mb-1 block text-xs font-medium text-muted-foreground";
  * the search box's unsubmitted text, which is dropped when the page is left
  * (Next keeps visited pages alive and would otherwise show it again).
  */
-export function OpportunityFilters({ options, current, total }: Props) {
+export function OpportunityFilters({ options, current, total, hiddenClosed }: Props) {
   const router = useRouter();
   const urlQ = current.q ?? "";
   const [q, setQ] = useState(urlQ);
@@ -51,7 +56,15 @@ export function OpportunityFilters({ options, current, total }: Props) {
     const sort =
       next.sort ??
       (nextQ !== current.q && current.sort !== "deadline" ? undefined : current.sort);
-    router.push(opportunitiesHref({ ...current, ...next, q: nextQ, sort, page: 1 }));
+    // Likewise the status: if it was just the default for the old search
+    // (browse: open & upcoming; search: all), let the new term's default apply.
+    const status =
+      "status" in next
+        ? next.status
+        : nextQ !== current.q && current.status === defaultStatus(current.q)
+          ? undefined
+          : current.status;
+    router.push(opportunitiesHref({ ...current, ...next, q: nextQ, sort, status, page: 1 }));
   }
 
   function onSearch(event: React.FormEvent) {
@@ -192,31 +205,49 @@ export function OpportunityFilters({ options, current, total }: Props) {
           <select
             id="f-status"
             className={selectClass}
-            value={current.status ?? ""}
-            onChange={(e) =>
-              go({ status: (e.target.value || undefined) as OpportunityFilters["status"] })
-            }
+            value={current.status ?? defaultStatus(current.q)}
+            onChange={(e) => go({ status: e.target.value as StatusFilter })}
           >
-            <option value="">Any</option>
-            {OPPORTUNITY_STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
+            <option value="active">{STATUS_FILTER_LABELS.active}</option>
+            <option value="all">{STATUS_FILTER_LABELS.all}</option>
+            <optgroup label="Only">
+              {OPPORTUNITY_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {STATUS_LABELS[status]}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {total === 0
-            ? "No matching opportunities"
-            : `${total.toLocaleString("en-IN")} ${total === 1 ? "opportunity" : "opportunities"}`}
+        <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <span>
+            {total === 0
+              ? "No matching opportunities"
+              : `${total.toLocaleString("en-IN")} ${total === 1 ? "opportunity" : "opportunities"}`}
+          </span>
+          {/* Say what the default "open & upcoming" filter hides, so nothing
+              looks missing. */}
+          {current.status === "active" && hiddenClosed > 0 ? (
+            <span>
+              {hiddenClosed.toLocaleString("en-IN")} closed{" "}
+              {hiddenClosed === 1 ? "listing" : "listings"} hidden —{" "}
+              <button
+                type="button"
+                onClick={() => go({ status: "all" })}
+                className="font-medium text-primary hover:underline"
+              >
+                show
+              </button>
+            </span>
+          ) : null}
           {hasActiveFilters(current) ? (
             <button
               type="button"
               onClick={clearAll}
-              className="ml-3 font-medium text-primary hover:underline"
+              className="font-medium text-primary hover:underline"
             >
               Clear all
             </button>

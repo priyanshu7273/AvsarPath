@@ -6,10 +6,13 @@ import { cacheLife, cacheTag } from "next/cache";
 import { isSupabaseConfigured } from "@/lib/env";
 import { publicClient } from "@/lib/supabase/public";
 import {
+  ACTIVE_STATUSES,
   CENTRAL_STATE,
+  INACTIVE_STATUSES,
   PAGE_SIZE,
   emptyFilterOptions,
   searchRelevance,
+  statusesFor,
   sumPostVacancies,
   type FilterOptions,
   type LookupOption,
@@ -162,12 +165,18 @@ export type OpportunityListResult = {
   rows: OpportunitySummary[];
   total: number;
   configured: boolean;
+  /**
+   * Closed/expired/cancelled listings that match the other filters but are
+   * hidden by the "open & upcoming" status filter (0 for any other filter).
+   */
+  hiddenClosed: number;
 };
 
 const EMPTY_RESULT = (configured: boolean): OpportunityListResult => ({
   rows: [],
   total: 0,
   configured,
+  hiddenClosed: 0,
 });
 
 /**
@@ -236,17 +245,35 @@ export async function getOpportunities(
   if (idConstraints.some((ids) => ids.length === 0)) return EMPTY_RESULT(true);
 
   // The listing query with every filter applied; `columns` varies by caller.
-  const filtered = (columns: string, options?: { count: "exact" }) => {
+  // `statuses` overrides the status filter (used for the hidden-closed count).
+  const filtered = (
+    columns: string,
+    options?: { count: "exact"; head?: boolean },
+    statuses: readonly string[] | null = statusesFor(filters.status),
+  ) => {
     let q = sb.from("opportunities").select(columns, options).eq("tr.locale", "en");
     if (categoryId) q = q.eq("category_id", categoryId);
     if (organisationId) q = q.eq("organisation_id", organisationId);
     if (filters.state === CENTRAL_STATE) q = q.is("state_id", null);
     else if (stateId) q = q.eq("state_id", stateId);
     if (filters.type) q = q.eq("opportunity_type", filters.type);
-    if (filters.status) q = q.eq("opportunity_status", filters.status);
+    if (statuses) q = q.in("opportunity_status", statuses);
     for (const ids of idConstraints) q = q.in("id", ids);
     return q;
   };
+
+  // With the default "open & upcoming" filter, count what it hides so the page
+  // can say so (nothing should look missing).
+  let hiddenClosed = 0;
+  if (filters.status === "active") {
+    const { count, error } = await filtered(
+      "id, tr:opportunity_translations!inner ( locale )",
+      { count: "exact", head: true },
+      INACTIVE_STATUSES,
+    );
+    if (error) throwQueryError("Failed to count closed listings", error);
+    hiddenClosed = count ?? 0;
+  }
 
   const from = (filters.page - 1) * PAGE_SIZE;
 
@@ -266,7 +293,7 @@ export async function getOpportunities(
       )
       .map((r) => r.id);
     const pageIds = ranked.slice(from, from + PAGE_SIZE);
-    if (pageIds.length === 0) return { rows: [], total: ranked.length, configured: true };
+    if (pageIds.length === 0) return { rows: [], total: ranked.length, configured: true, hiddenClosed };
 
     const { data: pageData, error: pageError } = await sb
       .from("opportunities")
@@ -279,7 +306,7 @@ export async function getOpportunities(
       ((pageData ?? []) as unknown as RawListRow[]).map((row) => [row.id, mapSummary(row)]),
     );
     const rows = pageIds.flatMap((id) => byId.get(id) ?? []);
-    return { rows, total: ranked.length, configured: true };
+    return { rows, total: ranked.length, configured: true, hiddenClosed };
   }
 
   let query = filtered(LIST_SELECT, { count: "exact" });
@@ -296,23 +323,38 @@ export async function getOpportunities(
   if (error) throwQueryError("Failed to load opportunities", error);
 
   const rows = ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
-  return { rows, total: count ?? rows.length, configured: true };
+  return { rows, total: count ?? rows.length, configured: true, hiddenClosed };
 }
 
-/** The most recently published opportunities, for the homepage. */
+/**
+ * The most recently published opportunities, for the homepage. Open and
+ * upcoming listings come first, so closed ones can't crowd them out; closed,
+ * expired or cancelled listings only fill any remaining slots.
+ */
 export async function getLatestOpportunities(limit = 4): Promise<OpportunitySummary[]> {
   if (!isSupabaseConfigured) return [];
 
   const sb = publicClient();
-  const { data, error } = await sb
-    .from("opportunities")
-    .select(LIST_SELECT)
-    .eq("tr.locale", "en")
-    .order("published_at", { ascending: false, nullsFirst: false })
-    .limit(limit);
+  const latest = (statuses: readonly string[], count: number) =>
+    sb
+      .from("opportunities")
+      .select(LIST_SELECT)
+      .eq("tr.locale", "en")
+      .in("opportunity_status", statuses)
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(count);
 
-  if (error) throwQueryError("Failed to load latest opportunities", error);
-  return ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
+  const active = await latest(ACTIVE_STATUSES, limit);
+  if (active.error) throwQueryError("Failed to load latest opportunities", active.error);
+  const rows = (active.data ?? []) as unknown as RawListRow[];
+
+  if (rows.length < limit) {
+    const rest = await latest(INACTIVE_STATUSES, limit - rows.length);
+    if (rest.error) throwQueryError("Failed to load latest opportunities", rest.error);
+    rows.push(...((rest.data ?? []) as unknown as RawListRow[]));
+  }
+
+  return rows.map(mapSummary);
 }
 
 /**

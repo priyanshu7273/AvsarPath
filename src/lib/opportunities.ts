@@ -161,10 +161,41 @@ export type OpportunityFilters = {
   state?: string; // state slug, or the sentinel "central"
   department?: string; // organisation slug
   type?: OpportunityType;
-  status?: OpportunityStatus;
+  status?: StatusFilter;
   sort: OpportunitySort;
   page: number;
 };
+
+/** Statuses people can still act on, and the ones that are over. */
+export const ACTIVE_STATUSES = ["open", "upcoming"] as const satisfies readonly OpportunityStatus[];
+export const INACTIVE_STATUSES = ["closed", "expired", "cancelled"] as const satisfies readonly OpportunityStatus[];
+
+/**
+ * The listing's Status filter: one status, "active" (open + upcoming) or "all".
+ * `undefined` means no status restriction (callers that build filters by hand).
+ */
+export type StatusFilter = OpportunityStatus | "active" | "all";
+
+export const STATUS_FILTER_LABELS: Record<"active" | "all", string> = {
+  active: "Open & upcoming",
+  all: "All, incl. closed",
+};
+
+/**
+ * The status filter used when the URL doesn't name one. Browsing shows only
+ * open and upcoming listings; a search covers everything, so closed listings
+ * still turn up in search results.
+ */
+export function defaultStatus(q: string | undefined): "active" | "all" {
+  return q ? "all" : "active";
+}
+
+/** The statuses a filter allows, or null for no restriction. */
+export function statusesFor(filter: StatusFilter | undefined): readonly OpportunityStatus[] | null {
+  if (!filter || filter === "all") return null;
+  if (filter === "active") return ACTIVE_STATUSES;
+  return [filter];
+}
 
 /** The sentinel used for all-India / central roles (state_id is null). */
 export const CENTRAL_STATE = "central";
@@ -264,6 +295,12 @@ function firstValue(value: string | string[] | undefined): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function parseStatus(raw: string | undefined, q: string | undefined): StatusFilter {
+  if (raw === "active" || raw === "all") return raw;
+  if ((OPPORTUNITY_STATUSES as readonly string[]).includes(raw ?? "")) return raw as OpportunityStatus;
+  return defaultStatus(q);
+}
+
 function parseSort(raw: string | undefined, q: string | undefined): OpportunitySort {
   if (raw === "deadline" || raw === "newest") return raw;
   if (raw === "relevance" && q) return raw;
@@ -321,9 +358,7 @@ export function parseOpportunityFilters(
     type: (OPPORTUNITY_TYPES as readonly string[]).includes(type ?? "")
       ? (type as OpportunityType)
       : undefined,
-    status: (OPPORTUNITY_STATUSES as readonly string[]).includes(status ?? "")
-      ? (status as OpportunityStatus)
-      : undefined,
+    status: parseStatus(status, q),
     sort: parseSort(sort, q),
     page: Number.isFinite(page) && page > 0 ? page : 1,
   };
@@ -338,7 +373,10 @@ export function opportunitiesHref(filters: Partial<OpportunityFilters>): string 
   if (filters.state) params.set("state", filters.state);
   if (filters.department) params.set("department", filters.department);
   if (filters.type) params.set("type", filters.type);
-  if (filters.status) params.set("status", filters.status);
+  // Only a non-default status goes in the URL (browse: open & upcoming; search: all).
+  if (filters.status && filters.status !== defaultStatus(filters.q)) {
+    params.set("status", filters.status);
+  }
   // Only a non-default sort goes in the URL; "relevance" means nothing without q.
   if (filters.sort && filters.sort !== defaultSort(filters.q) && (filters.sort !== "relevance" || filters.q)) {
     params.set("sort", filters.sort);
@@ -399,7 +437,7 @@ export function hasActiveFilters(filters: OpportunityFilters): boolean {
       filters.state ||
       filters.department ||
       filters.type ||
-      filters.status,
+      (filters.status && filters.status !== defaultStatus(filters.q)),
   );
 }
 

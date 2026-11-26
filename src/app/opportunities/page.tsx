@@ -60,7 +60,7 @@ async function ResultsList({ filters }: { filters: OpportunityFilterSet }) {
   }
 
   const options = await getFilterOptions();
-  const { rows, total } = await getOpportunities(filters, options);
+  const { rows, total, hiddenClosed } = await getOpportunities(filters, options);
 
   return (
     <div className="space-y-6">
@@ -71,10 +71,17 @@ async function ResultsList({ filters }: { filters: OpportunityFilterSet }) {
         options={options}
         current={filters}
         total={total}
+        hiddenClosed={hiddenClosed}
       />
 
       {rows.length === 0 ? (
-        <EmptyState message="No opportunities match these filters yet. Try widening or clearing them — new verified listings are added regularly." />
+        <EmptyState
+          message={
+            hiddenClosed > 0
+              ? `No open or upcoming listings match right now. ${hiddenClosed.toLocaleString("en-IN")} closed ${hiddenClosed === 1 ? "listing is" : "listings are"} hidden — choose “All, incl. closed” under Status to see ${hiddenClosed === 1 ? "it" : "them"}.`
+              : "No opportunities match these filters yet. Try widening or clearing them — new verified listings are added regularly."
+          }
+        />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2">
           {rows.map((opp) => (
