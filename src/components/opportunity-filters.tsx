@@ -101,7 +101,9 @@ export function OpportunityFilters({ options, current, total, hiddenClosed }: Pr
         </div>
       </form>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      {/* On wide screens the last column (Status) is a little wider so
+          "Open & upcoming" fits even at 1024px. */}
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-[repeat(5,minmax(0,1fr))_minmax(0,1.25fr)]">
         <div>
           <label htmlFor="f-qual" className={labelClass}>
             Qualification
@@ -179,7 +181,9 @@ export function OpportunityFilters({ options, current, total, hiddenClosed }: Pr
           </select>
         </div>
 
-        <div>
+        {/* Type and Status take a full row on phones so "Open & upcoming" isn't
+            clipped. */}
+        <div className="col-span-2 sm:col-span-1">
           <label htmlFor="f-type" className={labelClass}>
             Type
           </label>
@@ -198,7 +202,7 @@ export function OpportunityFilters({ options, current, total, hiddenClosed }: Pr
           </select>
         </div>
 
-        <div>
+        <div className="col-span-2 sm:col-span-1">
           <label htmlFor="f-status" className={labelClass}>
             Status
           </label>
