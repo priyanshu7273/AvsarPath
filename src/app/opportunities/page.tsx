@@ -12,7 +12,11 @@ import {
   parseOpportunityFilters,
   type OpportunityFilters as OpportunityFilterSet,
 } from "@/lib/opportunities";
-import { getFilterOptions, getOpportunities } from "@/lib/opportunities.server";
+import {
+  getFilterOptions,
+  getOpportunities,
+  requestToday,
+} from "@/lib/opportunities.server";
 
 export const metadata: Metadata = {
   title: "Opportunities",
@@ -43,12 +47,19 @@ export default function Page({ searchParams }: PageProps<"/opportunities">) {
 
 async function Results({ searchParams }: Pick<PageProps<"/opportunities">, "searchParams">) {
   // Reading the URL's filters is request-time; the rendered results for a given
-  // filter set are cached (keyed by `filters`) in ResultsList below.
+  // filter set and day are cached (keyed by `filters` and `today`) in
+  // ResultsList below, so statuses change at midnight (Indian time).
   const filters = parseOpportunityFilters(await searchParams);
-  return <ResultsList filters={filters} />;
+  return <ResultsList filters={filters} today={await requestToday()} />;
 }
 
-async function ResultsList({ filters }: { filters: OpportunityFilterSet }) {
+async function ResultsList({
+  filters,
+  today,
+}: {
+  filters: OpportunityFilterSet;
+  today: string;
+}) {
   "use cache";
   cacheLife("hours");
   cacheTag("opportunities");
@@ -60,7 +71,7 @@ async function ResultsList({ filters }: { filters: OpportunityFilterSet }) {
   }
 
   const options = await getFilterOptions();
-  const { rows, total, hiddenClosed } = await getOpportunities(filters, options);
+  const { rows, total, hiddenClosed } = await getOpportunities(filters, options, today);
 
   return (
     <div className="space-y-6">

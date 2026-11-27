@@ -1,7 +1,7 @@
 import "server-only";
 
 import { cache } from "react";
-import { cacheLife, cacheTag } from "next/cache";
+import { cacheLife, cacheTag, io } from "next/cache";
 
 import { isSupabaseConfigured } from "@/lib/env";
 import { publicClient } from "@/lib/supabase/public";
@@ -10,19 +10,34 @@ import {
   CENTRAL_STATE,
   INACTIVE_STATUSES,
   PAGE_SIZE,
+  effectiveStatus,
+  effectiveStatusFilter,
   emptyFilterOptions,
   searchRelevance,
   statusesFor,
   sumPostVacancies,
+  todayInIndia,
   type FilterOptions,
   type LookupOption,
   type OpportunityDetail,
   type OpportunityFilters,
   type OpportunityPost,
+  type OpportunityStatus,
   type OpportunitySummary,
   type QualificationOption,
   type StateOption,
 } from "@/lib/opportunities";
+
+/**
+ * Today's date in India (yyyy-mm-dd) for the current request. `io()` keeps the
+ * clock read out of the prerendered shell (it suspends while prerendering), so
+ * call this inside a `<Suspense>` boundary and pass the result into cached
+ * components, where it becomes part of the cache key.
+ */
+export async function requestToday(): Promise<string> {
+  await io();
+  return todayInIndia();
+}
 
 /**
  * Fail a query with context. When the framework aborts a render (e.g. while
@@ -41,11 +56,17 @@ function throwQueryError(context: string, error: { message?: string } | null): n
 // required English translation (inner join) plus the relations we display.
 // Visibility (published + verified) is enforced by RLS for the anon key, so we
 // don't repeat those predicates here.
+//
+// Every function that returns summaries takes `today` (yyyy-mm-dd, Indian date):
+// the shown status comes from the application dates (see `effectiveStatus`),
+// and callers inside a cached scope pass `today` in so it is part of the cache
+// key and statuses change at midnight, not when the cache entry expires.
 const LIST_SELECT = `
   id,
   opportunity_type,
   opportunity_status,
   vacancies,
+  application_start_date,
   application_end_date,
   published_at,
   organisation:organisations ( name, slug ),
@@ -99,6 +120,7 @@ type RawListRow = {
   opportunity_type: OpportunitySummary["type"];
   opportunity_status: OpportunitySummary["status"];
   vacancies: number | null;
+  application_start_date: string | null;
   application_end_date: string | null;
   published_at: string | null;
   organisation: Rel;
@@ -118,7 +140,7 @@ function sortedQualifications(
     .sort((a, b) => a.rank - b.rank);
 }
 
-function mapSummary(row: RawListRow): OpportunitySummary {
+function mapSummary(row: RawListRow, today: string): OpportunitySummary {
   const tr = row.tr?.[0];
   const posts = row.posts ?? [];
   // Posts are the source of truth for vacancies; fall back to the opportunity's
@@ -129,7 +151,14 @@ function mapSummary(row: RawListRow): OpportunitySummary {
     slug: tr?.slug ?? "",
     title: tr?.title ?? "Untitled opportunity",
     type: row.opportunity_type,
-    status: row.opportunity_status,
+    status: effectiveStatus(
+      {
+        status: row.opportunity_status,
+        applicationStartDate: row.application_start_date,
+        applicationEndDate: row.application_end_date,
+      },
+      today,
+    ),
     qualificationText: tr?.qualification ?? null,
     ageLimit: tr?.age_limit ?? null,
     vacancies,
@@ -166,8 +195,9 @@ export type OpportunityListResult = {
   total: number;
   configured: boolean;
   /**
-   * Closed/expired/cancelled listings that match the other filters but are
-   * hidden by the "open & upcoming" status filter (0 for any other filter).
+   * Listings showing as closed, expired or cancelled that match the other
+   * filters but are hidden by the "open & upcoming" status filter (0 for any
+   * other filter).
    */
   hiddenClosed: number;
 };
@@ -183,11 +213,13 @@ const EMPTY_RESULT = (configured: boolean): OpportunityListResult => ({
  * Fetch a page of opportunities for the public listing. The many-to-many
  * qualification filter and full-text search are resolved to opportunity ids
  * first, then AND-ed into the main query by id. `options` provides slug -> id
- * lookups so we don't re-query reference tables here.
+ * lookups so we don't re-query reference tables here. The Status filter matches
+ * the status each listing shows on `today`.
  */
 export async function getOpportunities(
   filters: OpportunityFilters,
   options: FilterOptions,
+  today: string,
 ): Promise<OpportunityListResult> {
   if (!isSupabaseConfigured) return EMPTY_RESULT(false);
 
@@ -249,7 +281,7 @@ export async function getOpportunities(
   const filtered = (
     columns: string,
     options?: { count: "exact"; head?: boolean },
-    statuses: readonly string[] | null = statusesFor(filters.status),
+    statuses: readonly OpportunityStatus[] | null = statusesFor(filters.status),
   ) => {
     let q = sb.from("opportunities").select(columns, options).eq("tr.locale", "en");
     if (categoryId) q = q.eq("category_id", categoryId);
@@ -257,7 +289,7 @@ export async function getOpportunities(
     if (filters.state === CENTRAL_STATE) q = q.is("state_id", null);
     else if (stateId) q = q.eq("state_id", stateId);
     if (filters.type) q = q.eq("opportunity_type", filters.type);
-    if (statuses) q = q.in("opportunity_status", statuses);
+    if (statuses) q = q.or(effectiveStatusFilter(statuses, today));
     for (const ids of idConstraints) q = q.in("id", ids);
     return q;
   };
@@ -303,7 +335,7 @@ export async function getOpportunities(
     if (pageError) throwQueryError("Failed to load opportunities", pageError);
 
     const byId = new Map(
-      ((pageData ?? []) as unknown as RawListRow[]).map((row) => [row.id, mapSummary(row)]),
+      ((pageData ?? []) as unknown as RawListRow[]).map((row) => [row.id, mapSummary(row, today)]),
     );
     const rows = pageIds.flatMap((id) => byId.get(id) ?? []);
     return { rows, total: ranked.length, configured: true, hiddenClosed };
@@ -322,25 +354,28 @@ export async function getOpportunities(
   const { data, count, error } = await query;
   if (error) throwQueryError("Failed to load opportunities", error);
 
-  const rows = ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
+  const rows = ((data ?? []) as unknown as RawListRow[]).map((row) => mapSummary(row, today));
   return { rows, total: count ?? rows.length, configured: true, hiddenClosed };
 }
 
 /**
- * The most recently published opportunities, for the homepage. Open and
- * upcoming listings come first, so closed ones can't crowd them out; closed,
- * expired or cancelled listings only fill any remaining slots.
+ * The most recently published opportunities, for the homepage. Listings showing
+ * as open or upcoming on `today` come first, so closed ones can't crowd them
+ * out; closed, expired or cancelled listings only fill any remaining slots.
  */
-export async function getLatestOpportunities(limit = 4): Promise<OpportunitySummary[]> {
+export async function getLatestOpportunities(
+  today: string,
+  limit = 4,
+): Promise<OpportunitySummary[]> {
   if (!isSupabaseConfigured) return [];
 
   const sb = publicClient();
-  const latest = (statuses: readonly string[], count: number) =>
+  const latest = (statuses: readonly OpportunityStatus[], count: number) =>
     sb
       .from("opportunities")
       .select(LIST_SELECT)
       .eq("tr.locale", "en")
-      .in("opportunity_status", statuses)
+      .or(effectiveStatusFilter(statuses, today))
       .order("published_at", { ascending: false, nullsFirst: false })
       .limit(count);
 
@@ -354,13 +389,13 @@ export async function getLatestOpportunities(limit = 4): Promise<OpportunitySumm
     rows.push(...((rest.data ?? []) as unknown as RawListRow[]));
   }
 
-  return rows.map(mapSummary);
+  return rows.map((row) => mapSummary(row, today));
 }
 
 /**
- * Opportunities whose application deadline is on or after `today`, soonest
- * first. `today` is passed in (as yyyy-mm-dd) so the caller controls the
- * request-time clock read. A `.gte` on a date column also drops NULL deadlines.
+ * Opportunities whose last date to apply is on or after `today` (Indian date,
+ * yyyy-mm-dd), soonest first; cancelled ones are left out. A `.gte` on a date
+ * column also drops NULL deadlines, so every row shows as open or upcoming.
  */
 export async function getUpcomingDeadlines(
   today: string,
@@ -373,16 +408,20 @@ export async function getUpcomingDeadlines(
     .from("opportunities")
     .select(LIST_SELECT)
     .eq("tr.locale", "en")
+    .neq("opportunity_status", "cancelled")
     .gte("application_end_date", today)
     .order("application_end_date", { ascending: true })
     .limit(limit);
 
   if (error) throwQueryError("Failed to load upcoming deadlines", error);
-  return ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
+  return ((data ?? []) as unknown as RawListRow[]).map((row) => mapSummary(row, today));
 }
 
 /** Public opportunity summaries for a set of ids (order not preserved). */
-export async function getOpportunitiesByIds(ids: string[]): Promise<OpportunitySummary[]> {
+export async function getOpportunitiesByIds(
+  ids: string[],
+  today: string,
+): Promise<OpportunitySummary[]> {
   if (!isSupabaseConfigured || ids.length === 0) return [];
 
   const sb = publicClient();
@@ -393,7 +432,7 @@ export async function getOpportunitiesByIds(ids: string[]): Promise<OpportunityS
     .in("id", ids);
 
   if (error) throwQueryError("Failed to load opportunities", error);
-  return ((data ?? []) as unknown as RawListRow[]).map(mapSummary);
+  return ((data ?? []) as unknown as RawListRow[]).map((row) => mapSummary(row, today));
 }
 
 /**

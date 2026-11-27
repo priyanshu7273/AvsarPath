@@ -14,6 +14,7 @@ import type { OpportunitySummary } from "@/lib/opportunities";
 import {
   getLatestOpportunities,
   getUpcomingDeadlines,
+  requestToday,
 } from "@/lib/opportunities.server";
 import { categories, qualifications, regions, site } from "@/lib/site";
 
@@ -112,7 +113,7 @@ export default function Home() {
           moreHref="/opportunities"
         >
           <Suspense fallback={<CardsSkeleton />}>
-            <LatestOpportunities />
+            <LatestToday />
           </Suspense>
         </Section>
 
@@ -122,7 +123,7 @@ export default function Home() {
           moreHref="/opportunities?sort=deadline"
         >
           <Suspense fallback={<CardsSkeleton />}>
-            <UpcomingDeadlines />
+            <DeadlinesToday />
           </Suspense>
         </Section>
 
@@ -165,17 +166,29 @@ export default function Home() {
   );
 }
 
-async function LatestOpportunities() {
+// Both listing sections depend on today's date (the status each card shows, and
+// which deadlines are still ahead), so they read the date per request (Indian
+// time) and pass it into the cached section: the rendered cards are cached per
+// day, and statuses change at midnight rather than when a cache entry expires.
+async function LatestToday() {
+  return <LatestOpportunities today={await requestToday()} />;
+}
+
+async function DeadlinesToday() {
+  return <UpcomingDeadlines today={await requestToday()} />;
+}
+
+async function LatestOpportunities({ today }: { today: string }) {
   "use cache";
   cacheLife("hours");
   cacheTag("opportunities");
   if (!isSupabaseConfigured) return <EmptyState />;
-  const rows = await getLatestOpportunities(4);
+  const rows = await getLatestOpportunities(today, 4);
   if (rows.length === 0) return <EmptyState />;
   return <OpportunityGrid rows={rows} />;
 }
 
-async function UpcomingDeadlines() {
+async function UpcomingDeadlines({ today }: { today: string }) {
   "use cache";
   cacheLife("hours");
   cacheTag("opportunities");
@@ -184,10 +197,6 @@ async function UpcomingDeadlines() {
       <EmptyState message="No approaching deadlines to show yet. Closing dates will appear here once opportunities are published." />
     );
   }
-  // "today" is resolved inside the cached scope and refreshes with the cache
-  // lifetime — accurate enough for a "deadlines approaching" list, and it keeps
-  // the homepage shell cacheable (no per-request clock read).
-  const today = new Date().toISOString().slice(0, 10);
   const rows = await getUpcomingDeadlines(today, 4);
   if (rows.length === 0) {
     return (

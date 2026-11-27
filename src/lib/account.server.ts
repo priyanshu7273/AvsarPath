@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSessionUser } from "@/lib/auth";
 import type { ApplicationStatus, OpportunitySummary } from "@/lib/opportunities";
-import { getOpportunitiesByIds } from "@/lib/opportunities.server";
+import { getOpportunitiesByIds, requestToday } from "@/lib/opportunities.server";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -22,7 +22,7 @@ export async function getSavedOpportunities(): Promise<OpportunitySummary[]> {
     .order("created_at", { ascending: false });
 
   const ids = (data ?? []).map((r) => r.opportunity_id as string);
-  return orderByIds(ids, await getOpportunitiesByIds(ids));
+  return orderByIds(ids, await getOpportunitiesByIds(ids, await requestToday()));
 }
 
 export async function isSaved(opportunityId: string): Promise<boolean> {
@@ -56,6 +56,7 @@ export async function getTrackedOpportunities(): Promise<TrackedOpportunity[]> {
   const rows = data ?? [];
   const summaries = await getOpportunitiesByIds(
     rows.map((r) => r.opportunity_id as string),
+    await requestToday(),
   );
   const byId = new Map(summaries.map((s) => [s.id, s]));
 

@@ -205,6 +205,7 @@ export type OpportunitySummary = {
   slug: string;
   title: string;
   type: OpportunityType;
+  /** The status shown on the day it was read (see `effectiveStatus`). */
   status: OpportunityStatus;
   qualificationText: string | null;
   ageLimit: string | null;
@@ -257,6 +258,7 @@ export type OpportunityDetail = {
   title: string;
   description: string | null;
   type: OpportunityType;
+  /** The STORED status; pages show `effectiveStatus(detail, today)`. */
   status: OpportunityStatus;
   qualificationText: string | null;
   eligibility: string | null;
@@ -400,21 +402,79 @@ export function eligibilityHref(filters: {
   return query ? `/eligibility?${query}` : "/eligibility";
 }
 
+/** The fields the shown status is worked out from. */
+export type StatusInputs = {
+  /** The status stored by the admin. */
+  status: OpportunityStatus;
+  applicationStartDate: string | null;
+  applicationEndDate: string | null;
+};
+
 /**
- * Whether people can still apply. "cancelled" wins; otherwise a listing is
- * closed when its status says so (closed/expired) OR its last date to apply
- * (inclusive, Indian date) is before `today`, so this works even before a job
- * updates the status. `today` is a yyyy-mm-dd date, see `todayInIndia`.
+ * The status a listing shows on `today` (yyyy-mm-dd, Indian date; see
+ * `todayInIndia`). It comes from the application window, so nobody has to
+ * update the stored status by hand:
+ *  - a stored "cancelled" always wins;
+ *  - before the start date it is upcoming, from the start date to the last
+ *    date (both inclusive) open, and after the last date closed;
+ *  - with only one of the two dates, the missing side sets no limit;
+ *  - with no dates at all, the stored status stands.
+ * `effectiveStatusFilter` applies exactly this rule in the database; keep the two
+ * in step.
+ */
+export function effectiveStatus(opp: StatusInputs, today: string): OpportunityStatus {
+  if (opp.status === "cancelled") return "cancelled";
+  const start = opp.applicationStartDate;
+  const end = opp.applicationEndDate;
+  if (start && today < start) return "upcoming";
+  if (end && today > end) return "closed";
+  if (start || end) return "open";
+  return opp.status;
+}
+
+/**
+ * A PostgREST `or` filter matching the opportunities whose `effectiveStatus` on
+ * `today` is one of `statuses`. Pass it to `.or(...)` on an `opportunities`
+ * query.
+ */
+export function effectiveStatusFilter(
+  statuses: readonly OpportunityStatus[],
+  today: string,
+): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) throw new Error(`Invalid date: ${today}`);
+  if (statuses.length === 0) throw new Error("effectiveStatusFilter needs at least one status");
+  const t = today;
+  const notCancelled = "opportunity_status.neq.cancelled";
+  // No dates at all: the stored status stands.
+  const stored = (s: OpportunityStatus) =>
+    `and(application_start_date.is.null,application_end_date.is.null,opportunity_status.eq.${s})`;
+  const clauses: Record<OpportunityStatus, string[]> = {
+    upcoming: [`and(${notCancelled},application_start_date.gt.${t})`, stored("upcoming")],
+    open: [
+      `and(${notCancelled},application_start_date.lte.${t},or(application_end_date.is.null,application_end_date.gte.${t}))`,
+      `and(${notCancelled},application_start_date.is.null,application_end_date.gte.${t})`,
+      stored("open"),
+    ],
+    closed: [
+      `and(${notCancelled},application_end_date.lt.${t},or(application_start_date.is.null,application_start_date.lte.${t}))`,
+      stored("closed"),
+    ],
+    expired: [stored("expired")],
+    cancelled: ["opportunity_status.eq.cancelled"],
+  };
+  return [...new Set(statuses)].flatMap((s) => clauses[s]).join(",");
+}
+
+/**
+ * Whether people can still apply, from the shown status: cancelled, closed
+ * (closed or expired), or open (open or upcoming).
  */
 export type ApplicationState = "open" | "closed" | "cancelled";
 
-export function applicationState(
-  opp: { status: OpportunityStatus; applicationEndDate: string | null },
-  today: string,
-): ApplicationState {
-  if (opp.status === "cancelled") return "cancelled";
-  if (opp.status === "closed" || opp.status === "expired") return "closed";
-  if (opp.applicationEndDate && opp.applicationEndDate < today) return "closed";
+export function applicationState(opp: StatusInputs, today: string): ApplicationState {
+  const status = effectiveStatus(opp, today);
+  if (status === "cancelled") return "cancelled";
+  if (status === "closed" || status === "expired") return "closed";
   return "open";
 }
 

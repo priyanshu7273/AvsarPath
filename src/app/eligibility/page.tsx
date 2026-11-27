@@ -15,7 +15,11 @@ import {
   type OpportunityFilters,
   type OpportunitySummary,
 } from "@/lib/opportunities";
-import { getFilterOptions, getOpportunities } from "@/lib/opportunities.server";
+import {
+  getFilterOptions,
+  getOpportunities,
+  requestToday,
+} from "@/lib/opportunities.server";
 
 export const metadata: Metadata = {
   title: "Eligibility Finder",
@@ -74,7 +78,7 @@ async function Finder({ searchParams }: Pick<PageProps<"/eligibility">, "searchP
       </div>
     );
   } else {
-    const { rows, total } = await getOpportunities(filters, options);
+    const { rows, total } = await getOpportunities(filters, options, await requestToday());
     results = <Results filters={filters} options={options} rows={rows} total={total} />;
   }
 

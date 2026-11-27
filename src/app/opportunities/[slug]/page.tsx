@@ -10,12 +10,12 @@ import {
   STATUS_LABELS,
   TYPE_LABELS,
   applicationState,
+  effectiveStatus,
   formatDate,
-  todayInIndia,
   type ExamEvent,
   type OpportunityDetail,
 } from "@/lib/opportunities";
-import { getOpportunityBySlug } from "@/lib/opportunities.server";
+import { getOpportunityBySlug, requestToday } from "@/lib/opportunities.server";
 import { getTrackingStatus, isSaved } from "@/lib/account.server";
 import { getSessionUser } from "@/lib/auth";
 import { JsonLd } from "@/components/json-ld";
@@ -74,10 +74,14 @@ async function OpportunityDetailView({
   // Existence check outside any cached scope, so notFound() never runs in `use cache`.
   const opp = await getOpportunityBySlug(slug);
   if (!opp) notFound();
+  // The shown status and the Apply button depend on the date (Indian time). It
+  // is read here, per request, and passed into the cached parts as part of
+  // their cache key, so they change at midnight.
+  const today = await requestToday();
 
   return (
     <article className="mx-auto max-w-4xl px-4 py-8">
-      <CachedArticleHeader slug={slug} />
+      <CachedArticleHeader slug={slug} today={today} />
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_18rem]">
         <CachedArticleBody slug={slug} />
@@ -88,7 +92,7 @@ async function OpportunityDetailView({
           >
             <UserActions slug={slug} />
           </Suspense>
-          <CachedArticleFacts slug={slug} />
+          <CachedArticleFacts slug={slug} today={today} />
         </aside>
       </div>
     </article>
@@ -100,13 +104,14 @@ async function OpportunityDetailView({
 // ---------------------------------------------------------------------------
 
 /** Structured data, breadcrumb, title block and the independence notice. */
-async function CachedArticleHeader({ slug }: { slug: string }) {
+async function CachedArticleHeader({ slug, today }: { slug: string; today: string }) {
   "use cache";
   cacheLife("hours");
   cacheTag("opportunities", `opportunity:${slug}`);
 
   const opp = await getOpportunityBySlug(slug);
   if (!opp) return null;
+  const status = effectiveStatus(opp, today);
 
   return (
     <>
@@ -124,7 +129,7 @@ async function CachedArticleHeader({ slug }: { slug: string }) {
       <header className="mt-4">
         <div className="flex flex-wrap items-center gap-2">
           <Badge>{TYPE_LABELS[opp.type] ?? opp.type}</Badge>
-          <Badge>{STATUS_LABELS[opp.status] ?? opp.status}</Badge>
+          <Badge>{STATUS_LABELS[status] ?? status}</Badge>
           {opp.category ? <span className="text-sm text-muted-foreground">{opp.category.name}</span> : null}
         </div>
         <h1 className="mt-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
@@ -260,7 +265,7 @@ async function CachedArticleBody({ slug }: { slug: string }) {
 }
 
 /** Sidebar key facts, official links and the source / last-verified note. */
-async function CachedArticleFacts({ slug }: { slug: string }) {
+async function CachedArticleFacts({ slug, today }: { slug: string; today: string }) {
   "use cache";
   cacheLife("hours");
   cacheTag("opportunities", `opportunity:${slug}`);
@@ -268,10 +273,7 @@ async function CachedArticleFacts({ slug }: { slug: string }) {
   const opp = await getOpportunityBySlug(slug);
   if (!opp) return null;
 
-  // Read inside "use cache", so "today" is as fresh as this cached entry
-  // (cacheLife "hours"): a listing can show as open for up to about an hour
-  // after its last date ends.
-  const state = applicationState(opp, todayInIndia());
+  const state = applicationState(opp, today);
   const applyHref = state === "open" ? usableUrl(opp.applicationUrl) : null;
   const notificationHref = usableUrl(opp.notificationUrl);
   const verified = formatDate(opp.lastVerifiedAt?.slice(0, 10));

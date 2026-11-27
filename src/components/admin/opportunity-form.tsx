@@ -247,6 +247,12 @@ export function OpportunityForm({
                 </option>
               ))}
             </select>
+            <span className="mt-1 block text-xs text-muted-foreground">
+              The site works the status out from the application dates: upcoming
+              before the start date, open until the last date, closed after it.
+              This setting is used only for Cancelled (always shown) and for
+              listings with no dates.
+            </span>
           </label>
 
           <label className="block">
