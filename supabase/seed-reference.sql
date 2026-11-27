@@ -30,7 +30,8 @@ insert into public.organisations (id, name, slug, website) values
   ('22222222-2222-2222-2222-222222220002', 'Staff Selection Commission',       'ssc',  'https://ssc.gov.in/'),
   ('22222222-2222-2222-2222-222222220003', 'Institute of Banking Personnel Selection', 'ibps', 'https://www.ibps.in/'),
   ('22222222-2222-2222-2222-222222220004', 'Railway Recruitment Board',        'rrb',  'https://www.rrbcdg.gov.in/'),
-  ('22222222-2222-2222-2222-222222220005', 'Bihar Public Service Commission',  'bpsc', 'https://bpsc.bihar.gov.in/')
+  ('22222222-2222-2222-2222-222222220005', 'Bihar Public Service Commission',  'bpsc', 'https://bpsc.bihar.gov.in/'),
+  ('22222222-2222-2222-2222-222222220006', 'State Bank of India',              'sbi',  'https://sbi.co.in/')
 on conflict (slug) do nothing;
 
 insert into public.qualifications (id, name, slug, rank, sort_order) values
